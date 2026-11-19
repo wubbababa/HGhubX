@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { addPluginListener, invoke } from "@tauri-apps/api/core";
-import { platform } from "../api";
+import { isTauriApp, platform } from "../api";
 import { acceptUsageAgreement, USAGE_AGREEMENT_VERSION } from "../usageAgreement";
 import "../styles/usage-agreement.css";
 
@@ -42,7 +42,7 @@ export default function UsageAgreement({ onAccept }: { onAccept: () => void }) {
     return () => window.removeEventListener("keydown", onKey, true);
   }, []);
   useEffect(() => {
-    if (platform !== "android") return;
+    if (platform !== "android" || !isTauriApp) return;
     let disposed = false;
     let listener: { unregister: () => Promise<void> } | undefined;
     void addPluginListener("app", "back-button", () => setDeclined(true)).then(handle => {
@@ -65,6 +65,11 @@ export default function UsageAgreement({ onAccept }: { onAccept: () => void }) {
 
   const exit = () => {
     setExiting(true);
+    if (!isTauriApp) {
+      setError("Web 模式下你可以直接关闭或离开此网页标签。");
+      setExiting(false);
+      return;
+    }
     void invoke("plugin:app|exit", { code: 0 }).catch(() => setError("应用尚未进入主界面，你可以直接关闭窗口。")).finally(() => setExiting(false));
   };
 

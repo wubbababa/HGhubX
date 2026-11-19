@@ -1,10 +1,13 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { tracePlayback } from "./playbackDiagnostics";
 import type {
   AccountHistoryPage, AccountIdentity, AccountSnapshot, CommentPage, Detail, HotSearchVideo, Paged, PlayInfo, Post, PostCategory, RankItem, TagGroup, TopicCard, TopicDetail, User, UserProfile, VideoCard,
 } from "./types";
 
 /* ── 运行环境 ───────────────────────────────────────────── */
+
+/** 是否在 Tauri 原生客户端中运行（false 代表在普通 Web 浏览器中运行） */
+export const isTauriApp = typeof window !== "undefined" && isTauri();
 
 /** 应用版本（构建时由 vite.config.ts 从 package.json 注入） */
 export const APP_VERSION = __APP_VERSION__;
@@ -31,16 +34,18 @@ export const webviewVersion =
 export const isMobile = isAndroid || isIos;
 
 /** 媒体基址随平台不同（Rust 侧对应 `media::LOCAL_ORIGIN`，两边必须一致）：
+ *  Web 端 → `/hg`（同源相对路径由全栈服务端或 Vite dev 代理分发）
  *  Windows / Android → `http://<scheme>.localhost`（自定义协议，WebView 自己加载）
  *  macOS / iOS → `hg://localhost`（WebKit 的 scheme handler）
  *  Linux → `http://127.0.0.1:17650`：WebKitGTK 的 <video> 由 GStreamer 播放，
  *          它拿不到自定义 scheme，所以由 Rust 侧在 loopback 上起 HTTP 代理
  *          （`src-tauri/src/linux_http.rs`，端口必须与此一致）。 */
-export const LOCAL =
-  isMacos || isIos ? "hg://localhost" : isLinux ? "http://127.0.0.1:17650" : "http://hg.localhost";
+export const LOCAL = !isTauriApp
+  ? "/hg"
+  : isMacos || isIos ? "hg://localhost" : isLinux ? "http://127.0.0.1:17650" : "http://hg.localhost";
 
 /** src 是否已是本地协议地址（避免在详情页把代理地址再包一层） */
-export const isLocalMedia = (src: string) => src.startsWith(`${LOCAL}/`);
+export const isLocalMedia = (src: string) => src.startsWith(`${LOCAL}/`) || (!isTauriApp && src.startsWith("/hg/"));
 
 /** 封面：经本地协议解密（站点封面是 AES 密文）。 */
 export const cover = (url?: string, _w = 480) =>
@@ -51,8 +56,14 @@ export const playlist = (url: string) => `${LOCAL}/hls?u=${encodeURIComponent(ur
 
 /* ── 调用封装 ───────────────────────────────────────────── */
 
-/** 写一行到应用数据目录 debug.log（用户反馈「打不开」时要的就是它） */
-export const logLine = (msg: string) => invoke("debug_log", { msg }).catch(() => {});
+/** 写一行到应用数据目录 debug.log（Web 模式下输出到 console） */
+export const logLine = (msg: string) => {
+  if (isTauriApp) {
+    return invoke("debug_log", { msg }).catch(() => {});
+  }
+  console.log(`[log] ${msg}`);
+  return Promise.resolve();
+};
 
 /** 网络类失败的样子：没有 HTTP 状态码，纯链路层（DNS / 连接 / 超时 / TLS） */
 const NET_FAIL = /dns|timed? ?out|timeout|connection|refused|reset|unreachable|broken pipe|tls|ssl|handshake|证书|网络|连接/i;
@@ -75,14 +86,36 @@ const failMessage = (msg: string, status?: string) =>
     ? `服务器请求失败（HTTP ${status}），请稍后重试或在设置中切换线路`
     : msg.length > 140 ? `${msg.slice(0, 140)}…` : msg;
 
+async function webInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`/api/invoke/${cmd}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(args || {}),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let errMsg = `HTTP ${res.status}`;
+    try {
+      const j = JSON.parse(text);
+      if (j.error) errMsg = j.error;
+    } catch {
+      if (text) errMsg = text;
+    }
+    throw new Error(errMsg);
+  }
+  return (await res.json()) as T;
+}
+
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  const once = () => invoke(cmd, args) as Promise<T>;
+  const once = () => (isTauriApp ? (invoke(cmd, args) as Promise<T>) : webInvoke<T>(cmd, args));
   try {
     const r = await once();
     notifyNet({ ok: true, cmd });
     return r;
   } catch (e) {
-    const msg = typeof e === "string" ? e : "请求失败，请检查网络";
+    const msg = typeof e === "string" ? e : (e as Error)?.message || "请求失败，请检查网络";
     const status = /^HTTP (\d{3})\b/.exec(msg)?.[1];
     const networkish = !status && NET_FAIL.test(msg);
     // 落盘完整错误链（dns error / connection refused / 证书错误…），toast 只显示截断版
@@ -101,7 +134,7 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
         notifyNet({ ok: true, cmd });
         return r;
       } catch (e2) {
-        const again = typeof e2 === "string" ? e2 : msg;
+        const again = typeof e2 === "string" ? e2 : (e2 as Error)?.message || msg;
         const againStatus = /^HTTP (\d{3})\b/.exec(again)?.[1];
         logLine(`[api] ${cmd} 重试仍失败 → ${again}`);
         tracePlayback("api.retry_failed", { cmd, err: again, status: againStatus ?? null });

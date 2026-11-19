@@ -2,7 +2,8 @@ import { Button, Image, SegmentedControl } from "./ios/controls";
 import { Loader } from "./ios/effects";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { api, cover, fmt, fmtTime, isMobile, logLine } from "../api";
+import { api, cover, fmt, fmtTime, isMobile, isTauriApp, logLine } from "../api";
+import { useResponsive } from "../useResponsive";
 import type { Detail, Episode, PlayInfo, Post, VideoCard } from "../types";
 import { useStore } from "../store";
 import { Img, Sheet } from "./ui";
@@ -46,7 +47,8 @@ type Props = {
 export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind = "video", active, bottomInset, onBack, onNearEnd, onBlocked, startEp, startTime }: Props) {
   const store = useStore();
   const { isLiked, isFav, setLiked, setCollected, setFollowing, actionPending, accountScope, muted, setMuted, volume, setVolume, toast, addHistory, user, setLoginOpen, swipeEp, setSwipeEp, preferHevc, setPreferHevc } = store;
-  const isDesktop = !isMobile;
+  const { isDesktopView } = useResponsive();
+  const isDesktop = isDesktopView;
   const holdGuide = useMobileHoldGuide();
   const contentPreferences = useContentPreferences();
   const { preferences, revision, blockReason } = contentPreferences;

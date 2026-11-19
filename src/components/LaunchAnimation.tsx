@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { addPluginListener } from "@tauri-apps/api/core";
-import { platform } from "../api";
+import { isTauriApp, platform } from "../api";
 import "../styles/launch.css";
 import UsageAgreement from "./UsageAgreement";
 import { hasAcceptedAgreement } from "../usageAgreement";
@@ -42,7 +42,7 @@ export function LaunchAnimation({ onFinish }: { onFinish: () => void }) {
   }, [finish]);
 
   useEffect(() => {
-    if (platform !== "android") return;
+    if (platform !== "android" || !isTauriApp) return;
     let disposed = false;
     let listener: { unregister: () => Promise<void> } | undefined;
     void addPluginListener("app", "back-button", finish).then(handle => {

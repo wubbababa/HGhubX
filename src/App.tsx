@@ -2,8 +2,9 @@ import { LiquidIndicator, Loader } from "./components/ios/effects";
 import { Button } from "./components/ios/controls";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStore, type Page, type Tab } from "./store";
-import { isMobile, selfTest } from "./api";
+import { isMobile, isTauriApp, selfTest } from "./api";
 import { addPluginListener, invoke } from "@tauri-apps/api/core";
+import { useResponsive } from "./useResponsive";
 import { runBack } from "./back";
 import Home from "./pages/Home";
 import Feed from "./components/Feed";
@@ -112,8 +113,9 @@ function MainTabs({ wide, pageActive, bottomInset }: { wide: boolean; pageActive
 
 function AppBody() {
   const { platform, tab, setTab, stack, pop, loginOpen, setLoginOpen, fs, clean } = useStore();
+  const { isMobileView } = useResponsive();
   const mainRef = useRef<HTMLDivElement>(null);
-  const [wide, setWide] = useState(!isMobile);
+  const [wide, setWide] = useState(!isMobileView);
   const [collapsed, setCollapsed] = useState(false);
 
   useLayoutEffect(() => {
@@ -145,15 +147,15 @@ function AppBody() {
   }, [stack.length, pop, setTab, loginOpen, setLoginOpen]);
 
   const pageActive = stack.length === 0 && !loginOpen;
-  const bottomInset = isMobile ? (fs || clean ? 0 : 74) : 14;
+  const bottomInset = isMobileView ? (fs || clean ? 0 : 74) : 14;
   /* 栈页（从搜索/分类/我的进入的播放页、图文页）没有底栏，
      底部只让出安全区。之前多留了 20px，视频底边会露出一条
      「底栏」似的窄缝（底部的压暗渐变到不了屏幕最底）。 */
-  const stackInset = isMobile ? 0 : 14;
+  const stackInset = isMobileView ? 0 : 14;
 
   return (
     <div className={`absolute inset-0 flex bg-canvas plat-${platform}`}>
-      {!isMobile && <DesktopRail collapsed={collapsed} />}
+      {!isMobileView && <DesktopRail collapsed={collapsed} />}
       <div ref={mainRef} className="relative flex-1 min-w-0 overflow-hidden win-main">
         <MainTabs wide={wide} pageActive={pageActive} bottomInset={bottomInset} />
 
@@ -163,7 +165,7 @@ function AppBody() {
           </div>
         ))}
 
-        {isMobile && !fs && !clean && stack.length === 0 && <TabBar />}
+        {isMobileView && !fs && !clean && stack.length === 0 && <TabBar />}
       </div>
     </div>
   );
@@ -256,6 +258,7 @@ function MobileShell() {
 /* ============ 入口 ============ */
 export default function App() {
   const { platform, loginOpen, setLoginOpen, tab, setTab, stack, pop, fs, setFs } = useStore();
+  const { isMobileView } = useResponsive();
   useEffect(() => {
     tracePlayback("navigation.change", { tab, stack: stack.map(p => ({ page: p.kind, key: p.key })), login_open: loginOpen });
   }, [tab, stack, loginOpen]);
@@ -263,7 +266,7 @@ export default function App() {
   /* iOS keeps player gestures free of selection handles while inputs and reading text
      retain native selection/copy. Pointer targeting also handles non-focusable articles. */
   useEffect(() => {
-    if (platform !== "ios") return;
+    if (platform !== "ios" || !isTauriApp) return;
     let last: boolean | null = null;
     const setTI = (enabled: boolean) => {
       if (last === enabled) return;
@@ -299,11 +302,13 @@ export default function App() {
     if (loginOpen) { setLoginOpen(false); return; }
     if (stack.length) { pop(); return; }
     if (tab !== "home") { setTab("home"); return; }
-    invoke("plugin:app|exit", { code: 0 }).catch(() => {});
+    if (isTauriApp) {
+      invoke("plugin:app|exit", { code: 0 }).catch(() => {});
+    }
   };
 
   useEffect(() => {
-    if (platform !== "android") return undefined;
+    if (platform !== "android" || !isTauriApp) return undefined;
     let disposed = false;
     let handle: { unregister: () => Promise<void> } | null = null;
     addPluginListener("app", "back-button", () => backRef.current())
@@ -322,7 +327,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    if (!import.meta.env.DEV || !isTauriApp) return;
     const t = window.setTimeout(() => {
       selfTest().then((r) => { invoke("debug_log", { msg: r }).catch(() => {}); }).catch(() => {});
     }, 2500);
@@ -331,7 +336,7 @@ export default function App() {
 
   return (
     <>
-      {isMobile ? <MobileShell /> : <DesktopShell />}
+      {isMobileView ? <MobileShell /> : <DesktopShell />}
       <LoginModal />
       <ToastHost />
     </>

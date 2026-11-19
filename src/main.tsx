@@ -7,11 +7,13 @@ import { invoke } from "@tauri-apps/api/core";
 import "./index.css";
 import { initPlaybackLog, installPlaybackPageEvents, tracePlayback } from "./playbackDiagnostics";
 import { initAutoLine } from "./autoLine";
-import { APP_VERSION, LOCAL, logLine, platform, webviewVersion } from "./api";
+import { APP_VERSION, isTauriApp, LOCAL, logLine, platform, webviewVersion } from "./api";
 import Hls from "hls.js";
 import { installLayoutDiagnostics } from "./layoutDiagnostics";
 installPlaybackPageEvents();
-void initPlaybackLog();
+if (isTauriApp) {
+  void initPlaybackLog();
+}
 /* 环境指纹：写进始终记录的 debug.log。用户复制诊断时不用再自报版本、平台、内核版本 */
 logLine(
   `[env] ver=${APP_VERSION} platform=${platform} webview=${webviewVersion} ` +
@@ -30,7 +32,11 @@ tracePlayback("app.env", {
 });
 /* 运行期错误统一落到 debug.log，便于自查 */
 function report(kind: string, msg: string) {
-  invoke("debug_log", { msg: `[${kind}] ${msg}` }).catch(() => {});
+  if (isTauriApp) {
+    invoke("debug_log", { msg: `[${kind}] ${msg}` }).catch(() => {});
+  } else {
+    console.warn(`[${kind}] ${msg}`);
+  }
   tracePlayback(`app.${kind}`, { detail: msg });
 }
 window.addEventListener("error", (e) => {

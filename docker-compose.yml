@@ -1,0 +1,14 @@
+services:
+  hghubx-web:
+    build: .
+    container_name: hghubx-web
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      # 如果 VPS 自身访问上游需要代理，可按需开启下方注释：
+      # - HTTP_PROXY=http://127.0.0.1:7890
+      # - HTTPS_PROXY=http://127.0.0.1:7890
+      # - NO_PROXY=localhost,127.0.0.1

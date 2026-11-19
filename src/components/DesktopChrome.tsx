@@ -2,39 +2,57 @@ import { Button } from "./ios/controls";
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useStore, type Tab } from "../store";
-import { APP_VERSION } from "../api";
+import { APP_VERSION, isTauriApp } from "../api";
 import { Avatar } from "./ui";
 import {
   IClose, IGrid, IGridF, IHome, IHomeF, IMinus, IMoon, IRestore, ISearch, ISettings, ISidebar,
   ISquare, ISun, ITrophy, IUser, IUserF, Logo,
 } from "../icons";
 
-const appWindow = () => getCurrentWindow();
+const appWindow = () => (isTauriApp ? getCurrentWindow() : null);
 
 export function DesktopTitleBar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const { theme, setTheme, setTab, platform } = useStore();
   const [maxed, setMaxed] = useState(false);
+  const [webFs, setWebFs] = useState(false);
   /* macOS 原生全屏：红绿灯被系统隐藏，标题栏左侧 84px 让位要收回（见 index.css） */
   const [nativeFs, setNativeFs] = useState(false);
 
   useEffect(() => {
+    if (!isTauriApp) {
+      const updateWebFs = () => setWebFs(!!document.fullscreenElement);
+      document.addEventListener("fullscreenchange", updateWebFs);
+      return () => document.removeEventListener("fullscreenchange", updateWebFs);
+    }
     let un: (() => void) | undefined;
     const sync = () => {
-      appWindow().isMaximized().then(setMaxed).catch(() => {});
-      appWindow().isFullscreen().then(setNativeFs).catch(() => {});
+      appWindow()?.isMaximized().then(setMaxed).catch(() => {});
+      appWindow()?.isFullscreen().then(setNativeFs).catch(() => {});
     };
     sync();
-    appWindow().onResized(sync)
+    appWindow()?.onResized(sync)
       .then((f: () => void) => { un = f; }).catch(() => {});
     return () => { un?.(); };
   }, []);
 
+  const toggleWebFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  };
+
   return (
     <header className={`win-titlebar ${nativeFs ? "is-native-fs" : ""}`} data-tauri-drag-region
-      onDoubleClick={(e) => { if (!(e.target as HTMLElement).closest("button")) appWindow().toggleMaximize().catch(() => {}); }}>
+      onDoubleClick={(e) => {
+        if (!isTauriApp) return;
+        if (!(e.target as HTMLElement).closest("button")) appWindow()?.toggleMaximize().catch(() => {});
+      }}>
       <div className="win-wordmark" data-tauri-drag-region>
         <Logo size={24} />
         <span>HG<span className="win-wordmark-light">hub</span>X</span>
+        {!isTauriApp && <span className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded bg-primary/20 text-primary font-mono leading-none">Web</span>}
       </div>
       <Button className="win-caption-tool" aria-label={collapsed ? "展开侧栏" : "收起侧栏"} onClick={onToggle}>
         <ISidebar size={17} strokeWidth={1.7} />
@@ -46,14 +64,19 @@ export function DesktopTitleBar({ collapsed, onToggle }: { collapsed: boolean; o
       <Button className="win-caption-tool" aria-label="搜索" onClick={() => setTab("search")}>
         <ISearch size={17} strokeWidth={1.7} />
       </Button>
-      {/* macOS 用系统自带的红绿灯（titleBarStyle: Overlay），不画自绘按钮 */}
-      {platform !== "macos" && (
+      {!isTauriApp && (
+        <Button className="win-caption-tool" aria-label={webFs ? "退出全屏" : "全屏"} onClick={toggleWebFullscreen}>
+          {webFs ? <IRestore size={16} strokeWidth={1.7} /> : <ISquare size={15} strokeWidth={1.7} />}
+        </Button>
+      )}
+      {/* macOS 用系统自带的红绿灯，Web 模式不画原生控制按钮 */}
+      {isTauriApp && platform !== "macos" && (
         <div className="win-caption-buttons">
-          <Button aria-label="最小化" onClick={() => appWindow().minimize().catch(() => {})}><IMinus size={15} strokeWidth={1.5} /></Button>
-          <Button aria-label={maxed ? "还原" : "最大化"} onClick={() => appWindow().toggleMaximize().catch(() => {})}>
+          <Button aria-label="最小化" onClick={() => appWindow()?.minimize().catch(() => {})}><IMinus size={15} strokeWidth={1.5} /></Button>
+          <Button aria-label={maxed ? "还原" : "最大化"} onClick={() => appWindow()?.toggleMaximize().catch(() => {})}>
             {maxed ? <IRestore size={14} strokeWidth={1.5} /> : <ISquare size={14} strokeWidth={1.5} />}
           </Button>
-          <Button className="win-close" aria-label="关闭" onClick={() => appWindow().close().catch(() => {})}><IClose size={16} strokeWidth={1.5} /></Button>
+          <Button className="win-close" aria-label="关闭" onClick={() => appWindow()?.close().catch(() => {})}><IClose size={16} strokeWidth={1.5} /></Button>
         </div>
       )}
     </header>

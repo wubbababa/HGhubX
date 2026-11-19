@@ -7,6 +7,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && tsc --project tsconfig.tests.json && vite build",
+    "web:dev": "vite",
+    "web:build": "tsc --noEmit && vite build",
+    "web:start": "node --use-env-proxy server/index.mjs",
     "preview": "vite preview",
     "test:playback": "node scripts/test-playback.mjs",
     "test:api-loading": "node scripts/test-api-loading.mjs",
