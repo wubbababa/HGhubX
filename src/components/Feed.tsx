@@ -24,9 +24,10 @@ import MobileHoldGuide from "./MobileHoldGuide";
 import { getHoldZone, HOLD_DELAY_MS, HOLD_LOCK_DISTANCE, type HoldZone } from "../mobileHold";
 import { useMobileHoldGuide } from "../useMobileHoldGuide";
 import {
-  IBack, IBoltF, IChevR, IChevronDown, IChevronUp, IClose, ICommentF, ICompress, IExpand, IFileText, IHeart, IHeartF, IMore,
+  IBack, IBoltF, IChevR, IChevronDown, IChevronUp, IClose, ICommentF, ICompress, ICrown, IExpand, IFileText, IHeart, IHeartF, IMore,
   ILink, IList, ILockF, IPauseF, IPlayF, ISearch, IStar, IStarF, IVertSwap, IVol, IVolMute,
 } from "../icons";
+import { clampSeekTime, shouldEnforceVipTrial, VIP_TRIAL_LIMIT_SECONDS } from "../vip";
 
 type Props = {
   videoIds: number[];
@@ -139,6 +140,8 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const [waiting, setWaiting] = useState(false);
   const [err, setErr] = useState("");
   const [panel, setPanel] = useState<"episodes" | "comments" | "article" | "detail" | null>(null);
+  const [showVipPrompt, setShowVipPrompt] = useState(false);
+  const isTrialRestricted = shouldEnforceVipTrial(store.user);
   /* 续播：拿到时长后再 seek 一次（只对进入时那一条生效） */
   const resumeRef = useRef<{ key: string; t: number } | null>(
     startTime && startTime > 1 ? { key: `${videoIds[startIndex]}:${startEp || 1}`, t: startTime } : null,
@@ -280,6 +283,13 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   /* 观看进度：onTime 里每 5 秒落一次；退出播放页时再用 liveRef 兜一次 */
   const onTimeTick = (t: number) => {
     if (!isCurrentPlayback()) return;
+    if (isTrialRestricted && t >= VIP_TRIAL_LIMIT_SECONDS) {
+      videoRef.current?.pause();
+      videoRef.current?.seek(VIP_TRIAL_LIMIT_SECONDS, "vip_trial_end");
+      playbackClock.publish(VIP_TRIAL_LIMIT_SECONDS);
+      setShowVipPrompt(true);
+      return;
+    }
     // Keep the writer from this observation; a later clear must invalidate old cleanup data.
     if (active) historyWriter.current = addHistory;
     liveRef.current = { id: curId, ep: curEp, dur: duration, t, permissionKey, accountScope };
@@ -299,8 +309,9 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     const r = resumeRef.current;
     if (r && r.key === playKey && r.t > 1 && (!d || r.t < d - 3)) {
       resumeRef.current = null;
-      videoRef.current?.seek(r.t, "history_resume");
-      playbackClock.publish(r.t);
+      const targetTime = clampSeekTime(r.t, store.user);
+      videoRef.current?.seek(targetTime, "history_resume");
+      playbackClock.publish(targetTime);
     }
   };
 
@@ -598,7 +609,11 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     if (!active || !allowed || controlsLocked || showHoldGuide) return;
     const seekRelative = (delta: number) => {
       const current = videoRef.current?.el()?.currentTime ?? 0;
-      videoRef.current?.seek(Math.max(0, current + delta), "keyboard_shortcut");
+      const target = clampSeekTime(current + delta, store.user);
+      if (isTrialRestricted && current + delta >= VIP_TRIAL_LIMIT_SECONDS) {
+        setShowVipPrompt(true);
+      }
+      videoRef.current?.seek(target, "keyboard_shortcut");
     };
     const fn = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
@@ -782,11 +797,17 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       return;
     }
     if (g.mode === "scrub") {
-      const target = scrubTarget.current;
+      const rawTarget = scrubTarget.current;
+      const target = rawTarget != null ? clampSeekTime(rawTarget, store.user) : null;
+      if (isTrialRestricted && rawTarget != null && rawTarget >= VIP_TRIAL_LIMIT_SECONDS) {
+        setShowVipPrompt(true);
+      }
       if (!cancelled && target != null) videoRef.current?.seek(target, "mobile_gesture");
       setScrub(null);
       scrubTarget.current = null;
-      if (g.playing && active) videoRef.current?.play();
+      if (g.playing && active && (!isTrialRestricted || (target != null && target < VIP_TRIAL_LIMIT_SECONDS))) {
+        videoRef.current?.play();
+      }
       return;
     }
     /* 上下划手势（swipeEp 开启时 overlay 是 touch-action:none，
@@ -1007,7 +1028,11 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     e.stopPropagation();
     const pct = barPctAt(e.clientX, e.clientY);
     if (pct != null && duration) {
-      const target = pct * duration;
+      const rawTarget = pct * duration;
+      const target = clampSeekTime(rawTarget, store.user);
+      if (isTrialRestricted && rawTarget >= VIP_TRIAL_LIMIT_SECONDS) {
+        setShowVipPrompt(true);
+      }
       videoRef.current?.trace("seek.input.up", { input: "mobile_bar", target });
       videoRef.current?.seek(target, "mobile_bar");
       playbackClock.publish(target);
@@ -1500,12 +1525,20 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
           visible={active && !idle}
           seekEnabled={active && !controlsLocked}
           seekKey={playKey}
+          maxAllowed={isTrialRestricted ? VIP_TRIAL_LIMIT_SECONDS : undefined}
           nextDisabled={!episodes.some((e) => e.ep_num === curEp + 1) && index >= effectiveVideoIds.length - 1}
           nextTitle={episodes.some((e) => e.ep_num === curEp + 1) ? "下一集 E" : "下一部 ↓"}
           swipeEp={swipeEp}
           onToggleSwipe={() => { setSwipeEp(!swipeEp); toast(swipeEp ? "上下划切集已关闭" : "上下划切集已开启"); }}
           onToggle={() => videoRef.current?.toggle()}
-          onSeek={(t, source) => { videoRef.current?.seek(t, source); playbackClock.publish(t); }}
+          onSeek={(t, source) => {
+            const valid = clampSeekTime(t, store.user);
+            if (isTrialRestricted && t >= VIP_TRIAL_LIMIT_SECONDS) {
+              setShowVipPrompt(true);
+            }
+            videoRef.current?.seek(valid, source);
+            playbackClock.publish(valid);
+          }}
           onSeekInteraction={(phase, input, target, pointerTarget) => videoRef.current?.trace(`seek.input.${phase}`, { input, target, pointer_target: pointerTarget })}
           onRate={(r) => { setRate(r); videoRef.current?.rate(r); }}
           onMute={() => setMuted((m) => !m)}
@@ -1680,6 +1713,40 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       <TagBlockMenu open={active && tagMenu} tags={meta.tags} onClose={() => setTagMenu(false)} onSettings={openPreferences} />
       {!isDesktop && <MobileHoldGuide open={showHoldGuide} onClose={holdGuide.dismiss} target={holdTargetRef} bottomInset={bottomInset} />}
       {controlsLocked && <PlaybackLock active={active} onUnlock={() => { setControlsLocked(false); wake(); }} />}
+      {showVipPrompt && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in pointer-events-auto">
+          <div className="max-w-[340px] w-full bg-[#18181b]/95 border border-white/10 rounded-2xl p-6 text-center shadow-2xl flex flex-col items-center">
+            <div className="w-13 h-13 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mb-3">
+              <ICrown size={28} />
+            </div>
+            <h3 className="text-[18px] font-bold text-white mb-2">试看已结束</h3>
+            <p className="text-[13px] text-zinc-300 leading-relaxed mb-6">
+              非 VIP 仅可试看前 1 分钟，请开通 VIP 畅享完整内容。
+            </p>
+            <div className="w-full flex flex-col gap-2.5">
+              {!store.user && (
+                <Button
+                  onClick={() => {
+                    store.setLoginOpen(true);
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-primary text-white font-semibold text-[14px] pressable">
+                  立即登录
+                </Button>
+              )}
+              <Button
+                onClick={() => {
+                  videoRef.current?.seek(0, "vip_replay");
+                  playbackClock.publish(0);
+                  setShowVipPrompt(false);
+                  videoRef.current?.play();
+                }}
+                className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-zinc-200 text-[13px] font-medium pressable">
+                重新试看前 1 分钟
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

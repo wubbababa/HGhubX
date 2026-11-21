@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
 
 type Props = {
-  time: number; duration: number; enabled?: boolean; resetKey?: string;
+  time: number; duration: number; maxAllowed?: number; enabled?: boolean; resetKey?: string;
   onSeek: (time: number, input: string) => void;
   onInteraction?: (phase: string, input: string, target: number, pointerTarget?: number) => void;
 };
 
 /** Preview pointer movement locally; commit a single seek on release. Keyboard stays native. */
-export function useSeekInput({ time, duration, enabled = true, resetKey, onSeek, onInteraction }: Props) {
+export function useSeekInput({ time, duration, maxAllowed, enabled = true, resetKey, onSeek, onInteraction }: Props) {
   const [preview, setPreview] = useState<number | null>(null);
   const pointer = useRef<{ id: number; x: number; moved: boolean; target: number; el: HTMLInputElement } | null>(null);
-  const latest = useRef({ onSeek, onInteraction }); latest.current = { onSeek, onInteraction };
+  const latest = useRef({ onSeek, onInteraction, maxAllowed }); latest.current = { onSeek, onInteraction, maxAllowed };
   const seekable = enabled && Number.isFinite(duration) && duration > 0;
   const release = () => {
     const p = pointer.current; pointer.current = null;
@@ -23,9 +23,14 @@ export function useSeekInput({ time, duration, enabled = true, resetKey, onSeek,
   };
   useEffect(() => { cancel(); }, [seekable, duration, resetKey]);
   useEffect(() => () => { release(); }, []);
+  const clampTarget = (raw: number) => {
+    const limit = latest.current.maxAllowed;
+    return typeof limit === "number" && limit >= 0 ? Math.min(raw, limit) : raw;
+  };
   const targetAt = (e: PointerEvent<HTMLInputElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    return rect.width ? Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration : 0;
+    const raw = rect.width ? Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration : 0;
+    return clampTarget(raw);
   };
   const displayTime = preview ?? time;
   return {
@@ -65,7 +70,7 @@ export function useSeekInput({ time, duration, enabled = true, resetKey, onSeek,
       onBlur: cancel,
       onChange: (e: ChangeEvent<HTMLInputElement>) => {
         if (!seekable || pointer.current) return;
-        const target = Number(e.target.value);
+        const target = clampTarget(Number(e.target.value));
         latest.current.onInteraction?.("change", "keyboard", target);
         latest.current.onSeek(target, "keyboard");
       },

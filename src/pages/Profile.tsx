@@ -8,7 +8,8 @@ import { Avatar, Empty, Modal } from "../components/ui";
 import { MediaCard } from "../components/cards";
 import { useContentPreferences } from "../contentPreferences";
 import { CollectionLink, CollectionLinks } from "../components/CollectionLink";
-import { IChevR, IClock, IHeart, ILogout, ISettings, IStar, IUser, IUserF } from "../icons";
+import { IChevR, IClock, ICrown, IHeart, ILogout, ISettings, IStar, IUser, IUserF } from "../icons";
+import { checkIsVip } from "../vip";
 
 /* Account changes discard cached details synchronously, before another account can paint. */
 export default function Profile({ wide }: { wide: boolean }) {
@@ -118,9 +119,27 @@ function ProfileContent({ wide }: { wide: boolean }) {
         {/* 资料卡：已登录 / 未登录（点开登录抽屉） */}
         {user ? (
           <Surface className="ios-account-card flex items-center gap-3.5 a-rise">
-            <Avatar size={56} name={user.nickname} hue={280} ring />
+            <div className="relative">
+              <Avatar size={56} name={user.nickname} hue={280} ring />
+              {checkIsVip(user) && (
+                <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-amber-500 text-black flex items-center justify-center shadow-sm" title="VIP 会员">
+                  <ICrown size={12} strokeWidth={2.4} />
+                </span>
+              )}
+            </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[16px] font-bold text-on truncate">{user.nickname}</div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[16px] font-bold text-on truncate">{user.nickname}</span>
+                {checkIsVip(user) ? (
+                  <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30">
+                    VIP
+                  </span>
+                ) : (
+                  <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-500/15 text-zinc-400">
+                    免费用户
+                  </span>
+                )}
+              </div>
               <div className="text-[12px] text-mut mt-0.5">@{user.username} · ID {user.id}</div>
               <div className="flex gap-3 mt-2 text-[12px] text-mut">
                 <span>点赞 <b className="text-on">{fmt(user.counts?.like)}</b></span>

@@ -21,6 +21,7 @@ type Props = {
   nextDisabled?: boolean;
   nextTitle?: string;
   swipeEp?: boolean;
+  maxAllowed?: number;
   onToggle: () => void;
   onSeek: (t: number, source?: string) => void;
   onSeekInteraction?: (phase: string, input: string, target: number, pointerTarget?: number) => void;
@@ -39,12 +40,12 @@ const formatClock = (s: number) => fmtTime(Math.max(0, s || 0)).padStart(5, "0")
 
 export default function PlayerControls({
   paused, clock, duration, buffered = 0, rate, muted, volume, theater = false, fullscreen = false,
-  visible = true, seekEnabled = true, seekKey, nextDisabled = false, nextTitle = "下一个", swipeEp = false, onToggle, onSeek, onSeekInteraction, onRate, onMute, onVolume, onPip, onLock, onTheater, onFullscreen, onNext, onToggleSwipe,
+  visible = true, seekEnabled = true, seekKey, nextDisabled = false, nextTitle = "下一个", swipeEp = false, maxAllowed, onToggle, onSeek, onSeekInteraction, onRate, onMute, onVolume, onPip, onLock, onTheater, onFullscreen, onNext, onToggleSwipe,
 }: Props) {
   const [speedOpen, setSpeedOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const clockTime = useSyncExternalStore(clock.subscribe, clock.getSnapshot, clock.getSnapshot);
-  const seek = useSeekInput({ time: clockTime, duration, enabled: seekEnabled, resetKey: seekKey, onInteraction: onSeekInteraction,
+  const seek = useSeekInput({ time: clockTime, duration, maxAllowed, enabled: seekEnabled, resetKey: seekKey, onInteraction: onSeekInteraction,
     onSeek: (target, input) => onSeek(target, `desktop_${input}`) });
   const pct = duration ? Math.min(100, (seek.time / duration) * 100) : 0;
 

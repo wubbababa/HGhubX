@@ -14,7 +14,9 @@ import { useSeekInput } from "../useSeekInput";
 import PlaybackLock from "./PlaybackLock";
 import { useInlinePlayerFullscreen } from "../useInlinePlayerFullscreen";
 import "../styles/post-player.css";
-import { ICompress, IExpand, ILockF, IPauseF, IPlayF, IVol, IVolMute } from "../icons";
+import { ICompress, IExpand, ILockF, IPauseF, IPlayF, IVol, IVolMute, ICrown } from "../icons";
+import { useStore } from "../store";
+import { shouldEnforceVipTrial, VIP_TRIAL_LIMIT_SECONDS, clampSeekTime } from "../vip";
 
 type Props = {
   src: string;              // 原始 m3u8 地址
@@ -51,18 +53,30 @@ export default function Player({
   const [rate, setRate] = useState(1);
   const [errMsg, setErrMsg] = useState<string>("");
   const [controlsLocked, setControlsLocked] = useState(false);
-  const seek = useSeekInput({ time, duration, enabled: active && !controlsLocked, resetKey: src,
+  const { user, setLoginOpen } = useStore();
+  const isTrialRestricted = shouldEnforceVipTrial(user);
+  const [showVipPrompt, setShowVipPrompt] = useState(false);
+  const seek = useSeekInput({
+    time,
+    duration,
+    maxAllowed: isTrialRestricted ? VIP_TRIAL_LIMIT_SECONDS : undefined,
+    enabled: active && !controlsLocked,
+    resetKey: src,
     onInteraction: (phase, input, target, pointerTarget) => trace(`seek.input.${phase}`, { input, target, pointer_target: pointerTarget }),
     onSeek: (target, input) => {
       const video = videoRef.current;
       if (!video || !activity.isActive()) return;
-      requestSeek(target, `legacy_${input}`);
+      const validTarget = clampSeekTime(target, user);
+      if (isTrialRestricted && target >= VIP_TRIAL_LIMIT_SECONDS) {
+        setShowVipPrompt(true);
+      }
+      requestSeek(validTarget, `legacy_${input}`);
       setWaiting(true);
       if (hlsRef.current) {
-        try { hlsRef.current.startLoad(target); } catch { /* ignore */ }
+        try { hlsRef.current.startLoad(validTarget); } catch { /* ignore */ }
       }
-      video.currentTime = target;
-      trace("seek.assigned", { target });
+      video.currentTime = validTarget;
+      trace("seek.assigned", { target: validTarget });
       setTime(video.currentTime);
     },
   });
@@ -206,7 +220,20 @@ export default function Player({
         onWaiting={() => setWaiting(true)}
         onPlaying={() => { if (activity.isActive()) { setWaiting(false); setErrMsg(""); onPlaying?.(); } }}
         onSeeked={() => setWaiting(false)}
-        onTimeUpdate={(e) => setTime((e.target as HTMLVideoElement).currentTime)}
+        onTimeUpdate={(e) => {
+          const cur = (e.target as HTMLVideoElement).currentTime;
+          if (isTrialRestricted && cur >= VIP_TRIAL_LIMIT_SECONDS) {
+            const video = videoRef.current;
+            if (video && !video.paused) {
+              video.pause();
+              video.currentTime = VIP_TRIAL_LIMIT_SECONDS;
+            }
+            setShowVipPrompt(true);
+            setTime(VIP_TRIAL_LIMIT_SECONDS);
+            return;
+          }
+          setTime(cur);
+        }}
         onLoadedMetadata={(e) => setDuration((e.target as HTMLVideoElement).duration || 0)}
         onEnded={() => { if (activity.isActive()) onEnded?.(); }}
         onError={() => {
@@ -264,6 +291,43 @@ export default function Player({
         </div>
       )}
       </div>
+      {showVipPrompt && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in pointer-events-auto">
+          <div className="max-w-[320px] w-full bg-s2/90 border border-white/10 rounded-2xl p-6 text-center shadow-2xl flex flex-col items-center">
+            <div className="w-12 h-12 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mb-3">
+              <ICrown size={24} />
+            </div>
+            <h3 className="text-[17px] font-bold text-white mb-2">试看已结束</h3>
+            <p className="text-[13px] text-zinc-300 leading-relaxed mb-5">
+              非 VIP 仅可试看前 1 分钟，请开通 VIP 畅享完整内容。
+            </p>
+            <div className="w-full flex flex-col gap-2.5">
+              {!user && (
+                <Button
+                  onClick={() => {
+                    setLoginOpen(true);
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-primary text-white font-semibold text-[14px] pressable">
+                  立即登录
+                </Button>
+              )}
+              <Button
+                onClick={() => {
+                  const video = videoRef.current;
+                  if (video) {
+                    video.currentTime = 0;
+                    setTime(0);
+                    setShowVipPrompt(false);
+                    activity.play("vip_replay");
+                  }
+                }}
+                className="w-full py-2 rounded-xl bg-white/10 hover:bg-white/15 text-zinc-200 text-[13px] pressable">
+                重新试看前 1 分钟
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       {controlsLocked && <PlaybackLock active={active} onUnlock={() => setControlsLocked(false)} />}
     </div>, host)}
     </div>
