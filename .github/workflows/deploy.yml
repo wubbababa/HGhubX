@@ -1,0 +1,67 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build & Deploy to Server
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm build
+
+      - name: Compress artifacts
+        run: |
+          tar -czf dist.tar.gz dist/
+          tar -czf server.tar.gz server/ package.json
+
+      - name: Deploy to Server via SSH
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          source: "dist.tar.gz,server.tar.gz"
+          target: "/tmp"
+
+      - name: Extract & Restart Service
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            TARGET_PATH="${{ secrets.SERVER_PATH || '/opt/hghubx' }}"
+            mkdir -p "$TARGET_PATH"
+            tar -xzf /tmp/dist.tar.gz -C "$TARGET_PATH"
+            tar -xzf /tmp/server.tar.gz -C "$TARGET_PATH"
+            rm -f /tmp/dist.tar.gz /tmp/server.tar.gz
+            systemctl restart hghubx || systemctl restart hghub
+            systemctl status hghubx --no-pager || systemctl status hghub --no-pager

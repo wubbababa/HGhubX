@@ -35,6 +35,72 @@ Windows / macOS / Linux / Android / iOS · iOS 圆角与玻璃材质 · 沉浸�
 > 包括打包出售、接入付费/会员/广告变现、作为收费产品或服务的一部分分发。
 > 个人学习、研究、自用与非营利使用不受限制，详见 [LICENSE](LICENSE)。
 
+## 部署说明 (Web 全栈版)
+
+本项目支持构建与部署独立的 Web 全栈端（包含前端静态页面 + Node.js 代理后端），方便在 Linux 服务器或 VPS 上自建访问。
+
+### 方式一：本地打包上传部署（推荐）
+
+如果服务器性能/内存较小（避免在服务器上执行 Vite/TypeScript 繁重的打包编译过程），推荐在本地完成构建后直接上传静态产物：
+
+1. **本地安装依赖并编译前端**：
+   ```bash
+   # 安装依赖
+   pnpm install
+   # 打包前端静态资源
+   pnpm build
+   ```
+2. **打包静态资源目录 `dist`**：
+   ```bash
+   tar -czf dist.tar.gz dist/
+   ```
+3. **上传到服务器项目目录（如 `/opt/hghubx`）**：
+   ```bash
+   # 将 dist.tar.gz 以及 server/ 目录、package.json 上传到服务器
+   scp dist.tar.gz root@<服务器IP>:/opt/hghubx/
+   ```
+4. **服务器端解压并重启服务**：
+   ```bash
+   cd /opt/hghubx
+   tar -xzf dist.tar.gz
+   # 重启 systemd 服务
+   systemctl restart hghubx
+   # 或查看运行状态
+   systemctl status hghubx
+   ```
+
+---
+
+### 方式二：服务器一键脚本部署
+
+在服务器上克隆仓库并运行一键部署脚本：
+
+```bash
+git clone https://github.com/wubbababa/HGhubX.git /opt/hghubx
+cd /opt/hghubx
+chmod +x deploy.sh
+./deploy.sh
+```
+
+- 该脚本会自动检查/安装 Node.js、pnpm，编译前端生成 `dist`，并自动注册并启动 `systemd` 服务（开机自启）。
+- 默认监听端口为 `3000`（可通过 `PORT=8080 ./deploy.sh` 自定义）。
+
+---
+
+### 方式三：Docker / Docker Compose 部署
+
+项目根目录包含完整的 `Dockerfile` 与 `docker-compose.yml`：
+
+```bash
+# 构建并后台启动
+docker compose up -d --build
+
+# 查看运行日志
+docker compose logs -f
+```
+
+---
+
 ## 仿冒提醒
 
 > 🚫 **已发现的恶意修改版**：[`hichuv 仓库`](https://github.com/hichuv 仓库)
