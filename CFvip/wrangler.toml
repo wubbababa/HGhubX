@@ -1,0 +1,13 @@
+name = "cfvip"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# 绑定的 KV 数据库（用于持久化保存 VIP 用户信息及订单绑定）
+[[kv_namespaces]]
+binding = "VIP_KV"
+id = "a2c7d56839324f9e88288f023ca2fb51"
+# preview_id = "YOUR_PREVIEW_KV_NAMESPACE_ID"
+
+[vars]
+# 与 CFpay 模块内部通信校验的密钥 Token
+INTERNAL_SECRET = "change_this_to_your_secure_secret"

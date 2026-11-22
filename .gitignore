@@ -29,5 +29,9 @@ Thumbs.db
 # API
 docs/API.md
 
+# Cloudflare Wrangler 临时缓存
+.wrangler/
+*/.wrangler/
+
 # Agent instructions (local)
 AGENTS.md

@@ -1,0 +1,14 @@
+{
+  "name": "cfvip",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Cloudflare Workers VIP判定与管理服务",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.114.17"
+  }
+}

@@ -1,0 +1,29 @@
+name = "cfpay"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# 绑定的订单 KV 数据库
+[[kv_namespaces]]
+binding = "PAY_KV"
+id = "58e26ec3f2cc4fb2a8471509d92059a1"
+
+[vars]
+# 支付宝网关（默认生产网关：https://openapi.alipay.com/gateway.do）
+# 沙箱环境请设为：https://openapi-sandbox.dl.alipaydev.com/gateway.do
+ALIPAY_GATEWAY = "https://openapi.alipay.com/gateway.do"
+
+# 支付宝开放平台 AppID
+ALIPAY_APP_ID = "YOUR_ALIPAY_APP_ID"
+
+# 支付成功后前端跳转的返回页面（如您的网页端首页或个人中心）
+RETURN_URL = "https://your-domain.com/#/profile"
+
+# CFvip 服务的完整访问基址
+CFVIP_SERVICE_URL = "https://cfvip.accessible-grenadilla.workers.dev"
+
+# 与 CFvip 通信的内部鉴权密钥
+INTERNAL_SECRET = "change_this_to_your_secure_secret"
+
+# 提示：敏感私钥与公钥请使用 wrangler secret put 进行安全注入：
+# - ALIPAY_PRIVATE_KEY : 应用私钥 (PKCS8 格式 PEM)
+# - ALIPAY_PUBLIC_KEY  : 支付宝公钥 (PEM)

@@ -68,6 +68,9 @@ export default function Player({
       if (!video || !activity.isActive()) return;
       const validTarget = clampSeekTime(target, user);
       if (isTrialRestricted && target >= VIP_TRIAL_LIMIT_SECONDS) {
+        if (hlsRef.current) {
+          try { hlsRef.current.stopLoad(); } catch { /* ignore */ }
+        }
         setShowVipPrompt(true);
       }
       requestSeek(validTarget, `legacy_${input}`);
@@ -227,6 +230,9 @@ export default function Player({
             if (video && !video.paused) {
               video.pause();
               video.currentTime = VIP_TRIAL_LIMIT_SECONDS;
+            }
+            if (hlsRef.current) {
+              try { hlsRef.current.stopLoad(); } catch { /* ignore */ }
             }
             setShowVipPrompt(true);
             setTime(VIP_TRIAL_LIMIT_SECONDS);

@@ -13,6 +13,7 @@ export type VideoHandle = {
   play: () => void;
   retry: () => void;
   pause: () => void;
+  stopLoad: () => void;
   toggle: () => void;
   seek: (t: number, source?: string) => void;
   trace: (event: string, data?: Record<string, unknown>) => void;
@@ -92,6 +93,14 @@ const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
     play: () => activity.play("handle"),
     retry: () => { if (activity.isActive()) proxyRecovery.retry("manual", true); },
     pause: () => activity.pause(),
+    stopLoad: () => {
+      activity.pause();
+      if (hlsRef.current) {
+        try {
+          hlsRef.current.stopLoad();
+        } catch { /* ignore */ }
+      }
+    },
     toggle: () => {
       const v = videoRef.current;
       if (!v) return;

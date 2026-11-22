@@ -284,7 +284,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const onTimeTick = (t: number) => {
     if (!isCurrentPlayback()) return;
     if (isTrialRestricted && t >= VIP_TRIAL_LIMIT_SECONDS) {
-      videoRef.current?.pause();
+      videoRef.current?.stopLoad();
       videoRef.current?.seek(VIP_TRIAL_LIMIT_SECONDS, "vip_trial_end");
       playbackClock.publish(VIP_TRIAL_LIMIT_SECONDS);
       setShowVipPrompt(true);
@@ -611,6 +611,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       const current = videoRef.current?.el()?.currentTime ?? 0;
       const target = clampSeekTime(current + delta, store.user);
       if (isTrialRestricted && current + delta >= VIP_TRIAL_LIMIT_SECONDS) {
+        videoRef.current?.stopLoad();
         setShowVipPrompt(true);
       }
       videoRef.current?.seek(target, "keyboard_shortcut");
@@ -800,6 +801,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       const rawTarget = scrubTarget.current;
       const target = rawTarget != null ? clampSeekTime(rawTarget, store.user) : null;
       if (isTrialRestricted && rawTarget != null && rawTarget >= VIP_TRIAL_LIMIT_SECONDS) {
+        videoRef.current?.stopLoad();
         setShowVipPrompt(true);
       }
       if (!cancelled && target != null) videoRef.current?.seek(target, "mobile_gesture");
@@ -1031,6 +1033,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       const rawTarget = pct * duration;
       const target = clampSeekTime(rawTarget, store.user);
       if (isTrialRestricted && rawTarget >= VIP_TRIAL_LIMIT_SECONDS) {
+        videoRef.current?.stopLoad();
         setShowVipPrompt(true);
       }
       videoRef.current?.trace("seek.input.up", { input: "mobile_bar", target });
@@ -1534,6 +1537,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
           onSeek={(t, source) => {
             const valid = clampSeekTime(t, store.user);
             if (isTrialRestricted && t >= VIP_TRIAL_LIMIT_SECONDS) {
+              videoRef.current?.stopLoad();
               setShowVipPrompt(true);
             }
             videoRef.current?.seek(valid, source);
