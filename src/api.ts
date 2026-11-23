@@ -86,12 +86,38 @@ const failMessage = (msg: string, status?: string) =>
     ? `服务器请求失败（HTTP ${status}），请稍后重试或在设置中切换线路`
     : msg.length > 140 ? `${msg.slice(0, 140)}…` : msg;
 
+const WEB_AUTH_TOKEN_KEY = "hghubx_web_token";
+
+export function getWebToken(): string | null {
+  try {
+    return localStorage.getItem(WEB_AUTH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setWebToken(token: string | null): void {
+  try {
+    if (token) {
+      localStorage.setItem(WEB_AUTH_TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(WEB_AUTH_TOKEN_KEY);
+    }
+  } catch { /* ignore */ }
+}
+
 async function webInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  const token = getWebToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   const res = await fetch(`/api/invoke/${cmd}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify(args || {}),
   });
   if (!res.ok) {
@@ -105,7 +131,14 @@ async function webInvoke<T>(cmd: string, args?: Record<string, unknown>): Promis
     }
     throw new Error(errMsg);
   }
-  return (await res.json()) as T;
+  const result = (await res.json()) as T;
+  if (!isTauriApp && (cmd === "api_login" || cmd === "api_register")) {
+    const snap = result as { token?: string };
+    if (snap?.token) setWebToken(snap.token);
+  } else if (!isTauriApp && cmd === "api_logout") {
+    setWebToken(null);
+  }
+  return result;
 }
 
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {

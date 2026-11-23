@@ -17,6 +17,38 @@ const DIST_DIR = path.resolve(__dirname, "../dist");
 let currentBase = DEFAULT_BASE;
 const activeSessions = new Map(); // token -> session info
 
+function normalizeAccount(data, origin) {
+  const source = data?.user && typeof data.user === "object" ? data.user : data;
+  const user = {};
+  for (const key of ["id", "username", "nickname", "avatar", "avatar_color", "sign", "desc", "user_type", "counts", "interactions"]) {
+    if (source && source[key] !== undefined) user[key] = source[key];
+  }
+  const interactions = data?.interactions || user.interactions;
+  if (interactions) user.interactions = interactions;
+  return {
+    user,
+    origin,
+    interactions,
+    token: data?.token,
+  };
+}
+
+function normalizeAccountHistory(value) {
+  const items = Array.isArray(value?.items) ? value.items : [];
+  const pagination = value?.pagination && typeof value.pagination === "object" ? value.pagination : { page: 1, pages: 1, size: 50, total: items.length };
+  const filtered = items.filter(item => item && item.target_type === "video" && Number(item.id) > 0 && Number(item.video_id) > 0).map(item => ({
+    id: Number(item.id),
+    video_id: Number(item.video_id),
+    target_type: "video",
+    last_ep: Math.max(1, Number(item.last_ep) || 1),
+    updated_at: String(item.updated_at || ""),
+  }));
+  return {
+    items: filtered,
+    pagination,
+  };
+}
+
 /**
  * 映射前端调用的 cmd 到上游业务接口
  */
@@ -28,9 +60,10 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
 
   switch (cmd) {
     case "app_boot": {
+      const sess = token && activeSessions.has(token) ? activeSessions.get(token) : null;
       return {
-        user: token && activeSessions.has(token) ? activeSessions.get(token).user : null,
-        logged_in: !!token && activeSessions.has(token),
+        user: sess ? sess.user : null,
+        logged_in: !!sess,
         base: currentBase,
         strict_security: false,
         cli_relaxed: true,
@@ -43,10 +76,11 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
         path: "/api/account/loginByPassword",
         body: { username: args.username, password: args.password },
       });
+      const normalized = normalizeAccount(res, currentBase);
       if (res?.token) {
-        activeSessions.set(res.token, { user: res.user, token: res.token });
+        activeSessions.set(res.token, { user: normalized.user, token: res.token });
       }
-      return res;
+      return normalized;
     }
     case "api_register": {
       const res = await forwardEdgeRequest({
@@ -60,22 +94,38 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
           email: args.email || "",
         },
       });
+      const normalized = normalizeAccount(res, currentBase);
       if (res?.token) {
-        activeSessions.set(res.token, { user: res.user, token: res.token });
+        activeSessions.set(res.token, { user: normalized.user, token: res.token });
       }
-      return res;
+      return normalized;
     }
     case "api_logout": {
-      if (token) activeSessions.delete(token);
+      if (token) {
+        try {
+          await forwardEdgeRequest({
+            origin: currentBase,
+            method: "POST",
+            path: "/api/account/logout",
+            token,
+          });
+        } catch { /* 忽略上游退出错误 */ }
+        activeSessions.delete(token);
+      }
       return { ok: true };
     }
     case "api_me": {
-      return forwardEdgeRequest({
+      const res = await forwardEdgeRequest({
         origin: currentBase,
         method: "GET",
-        path: "/api/account/info",
+        path: "/api/account/me",
         token,
       });
+      const normalized = normalizeAccount(res, currentBase);
+      if (token && normalized.user?.id) {
+        activeSessions.set(token, { user: normalized.user, token });
+      }
+      return normalized;
     }
     case "api_feed": {
       return forwardEdgeRequest({
@@ -255,45 +305,128 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
       });
     }
     case "api_like": {
+      const ep = args.ep || 1;
       return forwardEdgeRequest({
         origin: currentBase,
-        method: "POST",
-        path: `/api/videos/${args.id}/episodes/${args.ep}/like`,
-        body: { like: !!args.on },
+        method: args.on ? "POST" : "DELETE",
+        path: `/api/videos/${args.id}/like?ep=${ep}`,
         token,
       });
     }
     case "api_collect": {
       return forwardEdgeRequest({
         origin: currentBase,
-        method: "POST",
+        method: args.on ? "POST" : "DELETE",
         path: `/api/videos/${args.id}/collect`,
-        body: { collect: !!args.on },
         token,
       });
     }
     case "api_follow": {
       return forwardEdgeRequest({
         origin: currentBase,
-        method: "POST",
+        method: args.on ? "POST" : "DELETE",
         path: `/api/users/${args.uid}/follow`,
-        body: { follow: !!args.on },
+        token,
+      });
+    }
+    case "api_post_like": {
+      return forwardEdgeRequest({
+        origin: currentBase,
+        method: args.on ? "POST" : "DELETE",
+        path: `/api/posts/${args.id}/like`,
+        token,
+      });
+    }
+    case "api_post_collect": {
+      return forwardEdgeRequest({
+        origin: currentBase,
+        method: args.on ? "POST" : "DELETE",
+        path: `/api/posts/${args.id}/collect`,
+        token,
+      });
+    }
+    case "api_post_comments": {
+      return forwardEdgeRequest({
+        origin: currentBase,
+        method: "GET",
+        path: `/api/posts/${args.id}/comments?page=${args.page || 1}&size=${args.size || 20}`,
+        token,
+      });
+    }
+    case "api_post_categories": {
+      return forwardEdgeRequest({
+        origin: currentBase,
+        method: "GET",
+        path: "/api/site/categories/post",
+        token,
+      });
+    }
+    case "api_post_category": {
+      const encoded = encodeURIComponent(args.route || "");
+      const sort = args.sort ? `&sort=${encodeURIComponent(args.sort)}` : "";
+      return forwardEdgeRequest({
+        origin: currentBase,
+        method: "GET",
+        path: `/api/posts/category/${encoded}?page=${args.page || 1}&size=${args.size || 20}${sort}`,
+        token,
+      });
+    }
+    case "api_related": {
+      return forwardEdgeRequest({
+        origin: currentBase,
+        method: "GET",
+        path: `/api/videos/${args.id}/related`,
+        token,
+      });
+    }
+    case "api_following": {
+      return forwardEdgeRequest({
+        origin: currentBase,
+        method: "GET",
+        path: `/api/videos/following?page=${args.page || 1}&size=${args.size || 20}`,
+        token,
+      });
+    }
+    case "api_user": {
+      return forwardEdgeRequest({
+        origin: currentBase,
+        method: "GET",
+        path: `/api/users/${args.id}`,
+        token,
+      });
+    }
+    case "api_user_stats": {
+      return forwardEdgeRequest({
+        origin: currentBase,
+        method: "GET",
+        path: `/api/users/${args.id}/stats`,
+        token,
+      });
+    }
+    case "api_user_videos": {
+      return forwardEdgeRequest({
+        origin: currentBase,
+        method: "GET",
+        path: `/api/videos/user/${args.id}?page=${args.page || 1}&size=${args.size || 20}`,
         token,
       });
     }
     case "api_account_history": {
-      return forwardEdgeRequest({
+      const page = Math.max(1, Number(args.page) || 1);
+      const size = Math.min(100, Math.max(1, Number(args.size) || 50));
+      const res = await forwardEdgeRequest({
         origin: currentBase,
         method: "GET",
-        path: `/api/account/history?page=${args.page || 1}&size=${args.size || 50}`,
+        path: `/api/users/me/history?page=${page}&size=${size}`,
         token,
       });
+      return normalizeAccountHistory(res);
     }
     case "api_account_history_record": {
       return forwardEdgeRequest({
         origin: currentBase,
         method: "POST",
-        path: "/api/account/history",
+        path: "/api/users/me/history",
         body: { video_id: args.videoId, ep: args.ep },
         token,
       });
@@ -302,7 +435,7 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
       return forwardEdgeRequest({
         origin: currentBase,
         method: "POST",
-        path: "/api/account/history/delete",
+        path: "/api/users/me/history/delete",
         body: { ids: args.ids },
         token,
       });
