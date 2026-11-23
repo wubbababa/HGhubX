@@ -53,7 +53,12 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
         origin: currentBase,
         method: "POST",
         path: "/api/account/registerByPassword",
-        body: { username: args.username, password: args.password, email: args.email || "" },
+        body: {
+          username: args.username,
+          password: args.password,
+          confirm_password: args.confirm_password || args.password,
+          email: args.email || "",
+        },
       });
       if (res?.token) {
         activeSessions.set(res.token, { user: res.user, token: res.token });

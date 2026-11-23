@@ -13,7 +13,7 @@ id = "58e26ec3f2cc4fb2a8471509d92059a1"
 ALIPAY_GATEWAY = "https://openapi.alipay.com/gateway.do"
 
 # 支付宝开放平台 AppID
-ALIPAY_APP_ID = "YOUR_ALIPAY_APP_ID"
+ALIPAY_APP_ID = "2021007121650658"
 
 # 支付成功后前端跳转的返回页面（如您的网页端首页或个人中心）
 RETURN_URL = "https://your-domain.com/#/profile"
