@@ -9,6 +9,7 @@ import { runBack } from "./back";
 import Home from "./pages/Home";
 import Feed from "./components/Feed";
 import LoginModal from "./components/LoginModal";
+import VipModal from "./components/VipModal";
 import { ToastHost } from "./components/ui";
 import { DesktopRail, DesktopTitleBar } from "./components/DesktopChrome";
 import ResizeHandles from "./components/ResizeHandles";
@@ -320,7 +321,9 @@ export default function App() {
     };
   }, [platform]);
 
+  /* Web 端允许用户正常使用右键及复制文本，Tauri 客户端下非选区阻止默认右键菜单 */
   useEffect(() => {
+    if (!isTauriApp) return;
     const prevent = (e: Event) => { if (!isSelectableText(e.target)) e.preventDefault(); };
     document.addEventListener("contextmenu", prevent);
     return () => document.removeEventListener("contextmenu", prevent);
@@ -338,6 +341,7 @@ export default function App() {
     <>
       {isMobileView ? <MobileShell /> : <DesktopShell />}
       <LoginModal />
+      <VipModal />
       <ToastHost />
     </>
   );

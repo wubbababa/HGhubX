@@ -53,7 +53,7 @@ export default function Player({
   const [rate, setRate] = useState(1);
   const [errMsg, setErrMsg] = useState<string>("");
   const [controlsLocked, setControlsLocked] = useState(false);
-  const { user, setLoginOpen } = useStore();
+  const { user, setLoginOpen, setVipOpen } = useStore();
   const isTrialRestricted = shouldEnforceVipTrial(user);
   const [showVipPrompt, setShowVipPrompt] = useState(false);
   const seek = useSeekInput({
@@ -308,13 +308,21 @@ export default function Player({
               非 VIP 仅可试看前 1 分钟，请开通 VIP 畅享完整内容。
             </p>
             <div className="w-full flex flex-col gap-2.5">
+              <Button
+                onClick={() => {
+                  setVipOpen(true);
+                }}
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold text-[14px] flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/25 pressable">
+                <ICrown size={18} strokeWidth={2.4} />
+                开通 VIP 会员
+              </Button>
               {!user && (
                 <Button
                   onClick={() => {
                     setLoginOpen(true);
                   }}
-                  className="w-full py-2.5 rounded-xl bg-primary text-white font-semibold text-[14px] pressable">
-                  立即登录
+                  className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-semibold text-[13px] pressable">
+                  已有账号？立即登录
                 </Button>
               )}
               <Button
@@ -327,7 +335,7 @@ export default function Player({
                     activity.play("vip_replay");
                   }
                 }}
-                className="w-full py-2 rounded-xl bg-white/10 hover:bg-white/15 text-zinc-200 text-[13px] pressable">
+                className="w-full py-2 rounded-xl text-zinc-400 hover:text-zinc-200 text-[12px] pressable">
                 重新试看前 1 分钟
               </Button>
             </div>

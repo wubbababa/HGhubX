@@ -167,6 +167,7 @@ type Store = {
   setFollowing: (id: number, on: boolean) => Promise<void>;
   actionPending: (key: string) => boolean;
   loginOpen: boolean; setLoginOpen: (b: boolean) => void;
+  vipOpen: boolean; setVipOpen: (b: boolean) => void;
   logout: () => Promise<void>;
   likes: number[]; favs: number[]; history: WatchProgress[]; follows: number[];
   isLiked: (id: number, ep?: number, kind?: "video" | "post") => boolean; isFav: (id: number, kind?: "video" | "post") => boolean;
@@ -211,6 +212,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const { user, setUser } = account;
   const accountRef = useRef(account); accountRef.current = account;
   const [loginOpen, setLoginOpen] = useState(false);
+  const [vipOpen, setVipOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [lineEpoch, setLineEpoch] = useState(0);
   const [theater, setTheaterState] = useState(false);
@@ -399,7 +401,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     platform: envPlatform,
     theme, themePreference, setTheme,
     tab, setTab, stack, push, pop,
-    user, setUser, loginOpen, setLoginOpen, logout,
+    user, setUser, loginOpen, setLoginOpen, vipOpen, setVipOpen, logout,
     accountScope: account.accountScope, accountSync: account.accountSync, syncAccount: account.syncAccount,
     likes: account.likes, favs: account.favs, history: account.history, follows: account.follows,
     isLiked: account.isLiked, isFav: account.isFav,
@@ -413,7 +415,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     searchHist: p.searchHist, addSearch, clearSearchHist,
     strictSecurity, strictSecurityReady, securityPending, cliRelaxed, setStrictSecurity,
     toasts, toast, lineEpoch,
-  }), [theme, themePreference, setTheme, tab, setTab, stack, push, pop, user, loginOpen, logout,
+  }), [theme, themePreference, setTheme, tab, setTab, stack, push, pop, user, loginOpen, vipOpen, logout,
     p, account,
     setMuted, setMuteOnStartup, setSwipeEp, setPreferHevc, setVolume, addSearch, clearSearchHist, strictSecurity, strictSecurityReady, securityPending, cliRelaxed, setStrictSecurity,
     toasts, toast, lineEpoch, theater, setTheater, fs, setFs, clean, setClean]);

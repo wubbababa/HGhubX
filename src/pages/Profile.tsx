@@ -19,7 +19,7 @@ export default function Profile({ wide }: { wide: boolean }) {
 
 function ProfileContent({ wide }: { wide: boolean }) {
   const { blockReason } = useContentPreferences();
-  const { user, setLoginOpen, logout, history, favs, clearHistory, push, accountSync, syncAccount } = useStore();
+  const { user, setLoginOpen, setVipOpen, logout, history, favs, clearHistory, push, accountSync, syncAccount } = useStore();
   const [tab, setTab] = useState<"fav" | "history">("fav");
   const [cache, setCache] = useState<Record<number, Detail>>({});
   const cacheRef = useRef(cache);
@@ -135,9 +135,16 @@ function ProfileContent({ wide }: { wide: boolean }) {
                     VIP
                   </span>
                 ) : (
-                  <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-500/15 text-zinc-400">
-                    免费用户
-                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setVipOpen(true);
+                    }}
+                    className="shrink-0 px-2 py-0.5 rounded text-[11px] font-semibold bg-gradient-to-r from-amber-500 to-amber-600 text-black hover:opacity-90 flex items-center gap-1 cursor-pointer transition-opacity">
+                    <ICrown size={12} strokeWidth={2.4} />
+                    开通VIP
+                  </button>
                 )}
               </div>
               <div className="text-[12px] text-mut mt-0.5">@{user.username} · ID {user.id}</div>
