@@ -21,7 +21,11 @@ export async function forwardEdgeRequest({ origin = DEFAULT_BASE, method = "GET"
   };
 
   if (token) {
+    if (/[\r\n;]/.test(token)) throw new Error("登录令牌格式无效");
     headers["Authorization"] = `Bearer ${token}`;
+    // Upstream account endpoints authenticate with the HttpOnly session cookie.
+    // The Web proxy does not share the upstream cookie jar, so mirror the token here.
+    headers["Cookie"] = `_USER_TOKEN_=${token}; _LOGIN_=1`;
   }
 
   const httpMethod = (method || "GET").toUpperCase();
