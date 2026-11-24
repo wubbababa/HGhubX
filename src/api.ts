@@ -277,7 +277,18 @@ export const api = {
 
   /* 更新检查：对比 GitHub Release 的 tag */
   checkUpdate: () => call<UpdateInfo>("check_update"),
-  openUrl: (url: string) => call<void>("open_url", { url }),
+  openUrl: (url: string) => {
+    if (!isTauriApp) {
+      if (typeof window !== "undefined") {
+        const win = window.open(url, "_blank", "noopener,noreferrer");
+        if (!win || win.closed || typeof win.closed === "undefined") {
+          window.location.href = url;
+        }
+      }
+      return Promise.resolve();
+    }
+    return call<void>("open_url", { url });
+  },
 };
 
 /* ── 更新检查 ───────────────────────────────────────────── */

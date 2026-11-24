@@ -23,11 +23,13 @@ const FALLBACK_PLANS: VipPlan[] = [
   { id: "year", name: "年度 VIP", days: 365, price: "99.00", desc: "畅享 365 天无限制高清播放", badge: "超值" },
 ];
 
+/** 默认线上 Worker 域名兜底（避免未配置环境变量时请求前端本地相对路径） */
+const DEFAULT_CFVIP_BASE = "https://cfvip.accessible-grenadilla.workers.dev";
+const DEFAULT_CFPAY_GATEWAY = "https://cfpay.accessible-grenadilla.workers.dev/api/pay/create";
+
 /** CFvip 支付配置接口地址 */
-const PAY_CONFIG_URL =
-  (import.meta as any).env?.VITE_CFVIP_URL
-    ? `${(import.meta as any).env.VITE_CFVIP_URL}/api/pay/config`
-    : "/api/pay/config";
+const CFVIP_BASE = (import.meta as any).env?.VITE_CFVIP_URL || DEFAULT_CFVIP_BASE;
+const PAY_CONFIG_URL = `${CFVIP_BASE.replace(/\/$/, "")}/api/pay/config`;
 
 export default function VipModal() {
   const { vipOpen, setVipOpen, user, setLoginOpen, toast } = useStore();
@@ -35,8 +37,8 @@ export default function VipModal() {
   // 远程配置状态
   const [plans, setPlans] = useState<VipPlan[]>(FALLBACK_PLANS);
   const [payEnabled, setPayEnabled] = useState(true);
-  const [payGateway, setPayGateway] = useState(
-    (import.meta as any).env?.VITE_CFPAY_URL || "/api/pay/create",
+  const [payGateway, setPayGateway] = useState<string>(
+    (import.meta as any).env?.VITE_CFPAY_URL || DEFAULT_CFPAY_GATEWAY,
   );
   const [configLoading, setConfigLoading] = useState(false);
   const configLoaded = useRef(false);
@@ -52,8 +54,12 @@ export default function VipModal() {
     setConfigLoading(true);
 
     fetch(PAY_CONFIG_URL)
-      .then((res) => {
+      .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const cType = res.headers.get("content-type") || "";
+        if (!cType.includes("application/json")) {
+          throw new Error("接口返回非 JSON 数据");
+        }
         return res.json();
       })
       .then((data) => {
@@ -120,11 +126,23 @@ export default function VipModal() {
         }),
       });
 
-      if (!res.ok) {
-        throw new Error("创建支付订单失败，请稍后重试");
+      const cType = res.headers.get("content-type") || "";
+      let data: any = null;
+      if (cType.includes("application/json")) {
+        try {
+          data = await res.json();
+        } catch {}
       }
 
-      const data = await res.json();
+      if (!res.ok) {
+        const errorMsg = data?.message || `创建支付订单失败 (HTTP ${res.status})`;
+        throw new Error(errorMsg);
+      }
+
+      if (!data) {
+        throw new Error("支付接口返回异常（目标地址不是有效的支付网关）");
+      }
+
       if (data.ok && data.payment_url) {
         toast("正在前往支付宝支付...", "info");
         await api.openUrl(data.payment_url);

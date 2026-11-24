@@ -470,6 +470,9 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
         url: "",
       };
     }
+    case "open_url": {
+      return { ok: true };
+    }
     default:
       throw new Error(`未知命令: ${cmd}`);
   }
