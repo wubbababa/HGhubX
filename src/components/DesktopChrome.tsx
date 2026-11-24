@@ -134,7 +134,7 @@ export function DesktopRail({ collapsed }: { collapsed: boolean }) {
               <small>{user ? "你的精彩，都在这里" : "留住每一次心动"}</small>
             </span>
           </Button>
-          <span className="win-sidebar-version">HGhubX for {platform === "macos" ? "macOS" : platform === "linux" ? "Linux" : "Windows"} {APP_VERSION}</span>
+          {isTauriApp && <span className="win-sidebar-version">HGhubX for {platform === "macos" ? "macOS" : platform === "linux" ? "Linux" : "Windows"} {APP_VERSION}</span>}
         </div>
       </div>
     </nav>

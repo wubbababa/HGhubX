@@ -1,6 +1,6 @@
 import { Button, SegmentedControl, Surface, TextArea } from "../components/ios/controls";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { api, APP_VERSION, hostOf, logLine, platform, type UpdateInfo } from "../api";
+import { api, APP_VERSION, hostOf, isTauriApp, logLine, platform, type UpdateInfo } from "../api";
 import { useStore } from "../store";
 import { Modal, Toggle } from "../components/ui";
 import LinePicker from "../components/LinePicker";
@@ -310,7 +310,7 @@ export default function Settings({ onBack, initialSection }: { onBack: () => voi
             </Button>
           </>)}
 
-          <div className="text-center text-[12px] text-dim mt-5">HGhubX {APP_VERSION} · {platform === "android" ? "Android" : platform === "ios" ? "iOS" : platform === "macos" ? "macOS" : platform === "linux" ? "Linux" : "Windows"} 客户端</div>
+          {isTauriApp && <div className="text-center text-[12px] text-dim mt-5">HGhubX {APP_VERSION} · {platform === "android" ? "Android" : platform === "ios" ? "iOS" : platform === "macos" ? "macOS" : platform === "linux" ? "Linux" : "Windows"} 客户端</div>}
         </div>
       </div>
 

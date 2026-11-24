@@ -1,7 +1,7 @@
 import { Button, SegmentedControl, Surface } from "../components/ios/controls";
 import { Loader } from "../components/ios/effects";
 import { useEffect, useRef, useState } from "react";
-import { api, APP_VERSION, fmt, fmtTime, isMobile, platform } from "../api";
+import { api, APP_VERSION, fmt, fmtTime, isMobile, isTauriApp, platform } from "../api";
 import type { Detail } from "../types";
 import { useStore } from "../store";
 import { Avatar, Empty, Modal } from "../components/ui";
@@ -247,7 +247,7 @@ function ProfileContent({ wide }: { wide: boolean }) {
           {clearError && !clearOpen && <p role="alert" className="mt-2 text-[13px] text-danger">{clearError}</p>}
         </div>
 
-        <div className="text-center text-[12px] text-dim mt-5">HGhubX {APP_VERSION} · {platform === "android" ? "Android" : platform === "ios" ? "iOS" : platform === "macos" ? "macOS" : platform === "linux" ? "Linux" : "Windows"} 客户端</div>
+        {isTauriApp && <div className="text-center text-[12px] text-dim mt-5">HGhubX {APP_VERSION} · {platform === "android" ? "Android" : platform === "ios" ? "iOS" : platform === "macos" ? "macOS" : platform === "linux" ? "Linux" : "Windows"} 客户端</div>}
       </div>
       <Modal open={logoutOpen} onClose={() => { if (!logoutPending.current) setLogoutOpen(false); }} label="退出登录">
         <div className="p-5">

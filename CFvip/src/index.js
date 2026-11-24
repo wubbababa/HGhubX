@@ -2,15 +2,36 @@
  * CFvip: Cloudflare Worker VIP 判断与同步服务 & 管理后台
  * 
  * 路由说明：
- * 1. GET  /admin                          - 管理后台可视化前端页面
- * 2. GET  /api/admin/vip/list             - 管理员获取所有 VIP 用户列表
- * 3. POST /api/admin/vip/set              - 管理员手动为用户设置/续费/取消 VIP
- * 4. GET  /api/vip/check?username=xxx     - 查询某用户是否为 VIP 会员 (公开)
- * 5. POST /api/vip/sync                   - 接收支付平台(CFpay)回调同步 VIP 状态
- * 6. GET  /api/vip/info?username=xxx      - 获取用户 VIP 详细信息及支付关联记录
+ * 1.  GET  /admin                          - 管理后台可视化前端页面
+ * 2.  GET  /api/admin/vip/list             - 管理员获取所有 VIP 用户列表
+ * 3.  POST /api/admin/vip/set              - 管理员手动为用户设置/续费/取消 VIP
+ * 4.  GET  /api/vip/check?username=xxx     - 查询某用户是否为 VIP 会员 (公开)
+ * 5.  POST /api/vip/sync                   - 接收支付平台(CFpay)回调同步 VIP 状态
+ * 6.  GET  /api/admin/pay/config           - 管理员获取支付相关配置
+ * 7.  POST /api/admin/pay/config           - 管理员更新支付相关配置
+ * 8.  GET  /api/pay/config                 - 公开获取前端支付配置 (套餐、网关、启用状态)
+ * 9.  GET  /api/vip/info?username=xxx      - 获取用户 VIP 详细信息及支付关联记录
  */
 
 import { renderAdminHtml } from "./admin.js";
+
+// 默认支付配置
+const DEFAULT_PAY_CONFIG = {
+  enabled: true,
+  pay_type: "alipay", // alipay | custom
+  cfpay_gateway_url: "https://cfpay.accessible-grenadilla.workers.dev/api/pay/create",
+  alipay_gateway: "https://openapi.alipay.com/gateway.do",
+  alipay_app_id: "2021007121650658",
+  return_url: "https://your-domain.com/#/profile",
+  notify_url: "",
+  internal_secret: "",
+  plans: [
+    { id: "month", name: "月度 VIP", days: 30, price: "19.90", desc: "畅享 30 天无限制高清播放", badge: "尝鲜" },
+    { id: "quarter", name: "季度 VIP", days: 90, price: "49.90", desc: "畅享 90 天无限制高清播放", badge: "特惠" },
+    { id: "year", name: "年度 VIP", days: 365, price: "99.00", desc: "畅享 365 天无限制高清播放", badge: "超值" },
+  ],
+  updated_at: null,
+};
 
 function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -253,7 +274,102 @@ export default {
       });
     }
 
-    // 5. 用户 VIP 详细信息
+    // 5. 管理员获取支付相关配置 GET /api/admin/pay/config
+    if (url.pathname === "/api/admin/pay/config" && request.method === "GET") {
+      if (!checkAdminAuth(request, env)) {
+        return jsonResponse({ ok: false, message: "未授权：请提供有效的管理密钥" }, 401);
+      }
+
+      try {
+        const raw = await env.VIP_KV.get("config:pay");
+        const config = raw ? JSON.parse(raw) : { ...DEFAULT_PAY_CONFIG };
+        return jsonResponse({ ok: true, data: config });
+      } catch (err) {
+        return jsonResponse({ ok: false, message: "读取支付配置异常: " + err.message }, 500);
+      }
+    }
+
+    // 6. 管理员更新支付相关配置 POST /api/admin/pay/config
+    if (url.pathname === "/api/admin/pay/config" && request.method === "POST") {
+      if (!checkAdminAuth(request, env)) {
+        return jsonResponse({ ok: false, message: "未授权：请提供有效的管理密钥" }, 401);
+      }
+
+      let payload;
+      try {
+        payload = await request.json();
+      } catch {
+        return jsonResponse({ ok: false, message: "无效的 JSON 数据" }, 400);
+      }
+
+      try {
+        // 读取现有配置，合并更新
+        const raw = await env.VIP_KV.get("config:pay");
+        const existing = raw ? JSON.parse(raw) : { ...DEFAULT_PAY_CONFIG };
+
+        // 安全合并：只更新允许的顶级字段
+        const allowedFields = [
+          "enabled", "pay_type", "cfpay_gateway_url",
+          "alipay_gateway", "alipay_app_id",
+          "return_url", "notify_url", "internal_secret",
+          "plans",
+        ];
+
+        for (const field of allowedFields) {
+          if (payload[field] !== undefined) {
+            existing[field] = payload[field];
+          }
+        }
+
+        // 校验套餐数据格式
+        if (existing.plans && Array.isArray(existing.plans)) {
+          for (const plan of existing.plans) {
+            if (!plan.id || !plan.name || plan.days === undefined || plan.price === undefined) {
+              return jsonResponse({
+                ok: false,
+                message: "套餐数据格式错误：每个套餐需包含 id, name, days, price 字段",
+              }, 400);
+            }
+          }
+        }
+
+        existing.updated_at = new Date().toISOString();
+
+        await env.VIP_KV.put("config:pay", JSON.stringify(existing));
+
+        return jsonResponse({
+          ok: true,
+          message: "支付配置已更新",
+          data: existing,
+        });
+      } catch (err) {
+        return jsonResponse({ ok: false, message: "更新支付配置异常: " + err.message }, 500);
+      }
+    }
+
+    // 7. 公开获取前端支付配置（套餐、网关、启用状态） GET /api/pay/config
+    if (url.pathname === "/api/pay/config" && request.method === "GET") {
+      try {
+        const raw = await env.VIP_KV.get("config:pay");
+        const config = raw ? JSON.parse(raw) : { ...DEFAULT_PAY_CONFIG };
+
+        // 公开接口只返回前端需要的字段，不暴露敏感信息
+        return jsonResponse({
+          ok: true,
+          data: {
+            enabled: config.enabled,
+            pay_type: config.pay_type,
+            plans: config.plans || [],
+            return_url: config.return_url || "",
+            cfpay_gateway_url: config.cfpay_gateway_url || "",
+          },
+        });
+      } catch (err) {
+        return jsonResponse({ ok: false, message: "读取支付配置异常: " + err.message }, 500);
+      }
+    }
+
+    // 8. 用户 VIP 详细信息
     if (url.pathname === "/api/vip/info" && request.method === "GET") {
       const username = url.searchParams.get("username")?.trim();
       if (!username) {

@@ -381,6 +381,189 @@ export function renderAdminHtml() {
     .val-title {
       color: var(--text-muted);
     }
+
+    /* 支付配置面板样式 */
+    .pay-section {
+      margin-bottom: 2rem;
+    }
+
+    .pay-section .section-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: #e2e8f0;
+    }
+
+    .pay-section .section-title svg {
+      width: 20px;
+      height: 20px;
+      color: var(--primary);
+    }
+
+    .pay-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 48px;
+      height: 26px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 13px;
+      cursor: pointer;
+      transition: background 0.2s;
+      border: 1px solid var(--border);
+    }
+
+    .toggle-switch.active {
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.2s;
+    }
+
+    .toggle-switch.active::after {
+      transform: translateX(22px);
+    }
+
+    .pay-type-selector {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .pay-type-option {
+      flex: 1;
+      padding: 0.85rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.5);
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+
+    .pay-type-option:hover {
+      border-color: rgba(99, 102, 241, 0.4);
+    }
+
+    .pay-type-option.selected {
+      border-color: var(--primary);
+      background: rgba(99, 102, 241, 0.1);
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+    }
+
+    .pay-type-option .type-label {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+
+    .pay-type-option .type-desc {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .plan-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .plan-card {
+      display: grid;
+      grid-template-columns: 1fr 1fr 80px 1fr 1fr auto;
+      gap: 0.75rem;
+      align-items: center;
+      padding: 0.85rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.4);
+    }
+
+    @media (max-width: 840px) {
+      .plan-card {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+      }
+    }
+
+    .plan-card input {
+      font-size: 0.85rem;
+      padding: 0.5rem 0.65rem;
+    }
+
+    .plan-remove-btn {
+      background: none;
+      border: none;
+      color: #f87171;
+      cursor: pointer;
+      font-size: 1.1rem;
+      padding: 0.35rem;
+      border-radius: 6px;
+      transition: background 0.15s;
+    }
+
+    .plan-remove-btn:hover {
+      background: rgba(239, 68, 68, 0.15);
+    }
+
+    .pay-actions {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 1.25rem;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 1.5rem 0;
+    }
+
+    .field-hint {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    .config-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      padding: 0.3rem 0.7rem;
+      border-radius: 9999px;
+      margin-left: auto;
+    }
+
+    .config-status.saved {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .config-status.unsaved {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
   </style>
 </head>
 <body>
@@ -486,6 +669,107 @@ export function renderAdminHtml() {
             <button class="btn btn-secondary btn-sm" onclick="quickFillForm()">填入左侧表单编辑</button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- 支付参数配置面板 -->
+    <div class="card pay-section" style="margin-bottom: 2rem;">
+      <div class="section-title">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+        </svg>
+        支付参数配置
+        <span id="payConfigStatus" class="config-status saved" style="display: none;">● 已保存</span>
+      </div>
+
+      <!-- 支付开关 -->
+      <div class="pay-toggle">
+        <div id="payEnabledToggle" class="toggle-switch active" onclick="togglePayEnabled()"></div>
+        <span style="font-size: 0.9rem;">启用在线支付</span>
+        <span id="payEnabledLabel" style="font-size: 0.8rem; color: var(--success);">已启用</span>
+      </div>
+
+      <!-- 支付方式选择 -->
+      <div class="form-group">
+        <label>支付方式</label>
+        <div class="pay-type-selector">
+          <div class="pay-type-option selected" data-type="alipay" onclick="selectPayType('alipay')">
+            <div class="type-label">💰 支付宝</div>
+            <div class="type-desc">通过 CFpay 网关对接支付宝</div>
+          </div>
+          <div class="pay-type-option" data-type="custom" onclick="selectPayType('custom')">
+            <div class="type-label">🔧 自定义</div>
+            <div class="type-desc">自定义支付网关地址</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- 网关配置 -->
+      <div class="grid" style="margin-bottom: 0;">
+        <div>
+          <div class="form-group">
+            <label for="payCfpayGateway">CFpay 网关地址</label>
+            <input type="text" id="payCfpayGateway" placeholder="https://cfpay.xxx.workers.dev/api/pay/create" />
+            <div class="field-hint">CFpay 创建支付订单的完整 URL</div>
+          </div>
+          <div class="form-group">
+            <label for="payAlipayGateway">支付宝网关地址</label>
+            <input type="text" id="payAlipayGateway" placeholder="https://openapi.alipay.com/gateway.do" />
+            <div class="field-hint">支付宝开放平台网关，通常无需修改</div>
+          </div>
+          <div class="form-group">
+            <label for="payAlipayAppId">支付宝应用 App ID</label>
+            <input type="text" id="payAlipayAppId" placeholder="如：2021007121650658" />
+            <div class="field-hint">在支付宝开放平台创建应用后获取</div>
+          </div>
+        </div>
+        <div>
+          <div class="form-group">
+            <label for="payReturnUrl">支付完成跳转地址 (return_url)</label>
+            <input type="text" id="payReturnUrl" placeholder="https://your-domain.com/#/profile" />
+            <div class="field-hint">用户支付成功后浏览器自动跳转的前端页面地址</div>
+          </div>
+          <div class="form-group">
+            <label for="payNotifyUrl">异步通知地址 (notify_url)</label>
+            <input type="text" id="payNotifyUrl" placeholder="https://cfvip.xxx.workers.dev/api/vip/sync" />
+            <div class="field-hint">支付结果异步通知回调 URL，通常指向本服务的 /api/vip/sync</div>
+          </div>
+          <div class="form-group">
+            <label for="payInternalSecret">内部通信密钥 (internal_secret)</label>
+            <input type="password" id="payInternalSecret" placeholder="用于 CFpay 与本服务之间的鉴权" />
+            <div class="field-hint">CFpay 与 CFvip 之间通信使用的共享密钥</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- VIP 套餐管理 -->
+      <div class="form-group">
+        <label style="font-size: 0.95rem; font-weight: 600; color: #e2e8f0; margin-bottom: 0.75rem;">VIP 套餐列表</label>
+        <div id="planCards" class="plan-cards">
+          <!-- 套餐卡片将由 JS 动态渲染 -->
+        </div>
+        <button type="button" class="btn btn-secondary" style="margin-top: 0.75rem; width: 100%;" onclick="addPlan()">
+          + 添加新套餐
+        </button>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- 操作按钮 -->
+      <div class="pay-actions">
+        <button class="btn btn-primary" onclick="savePayConfig()" style="flex: 1;">
+          💾 保存支付配置
+        </button>
+        <button class="btn btn-secondary" onclick="loadPayConfig()">
+          🔄 重新加载
+        </button>
+        <button class="btn btn-danger" onclick="resetPayConfig()">
+          ⚠️ 恢复默认
+        </button>
       </div>
     </div>
 
@@ -822,6 +1106,266 @@ export function renderAdminHtml() {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    // ======== 支付配置管理 ========
+    let payConfig = null; // 当前加载的支付配置缓存
+
+    // 页面初始化时也加载支付配置
+    const origDOMReady = window.addEventListener;
+    window.addEventListener('DOMContentLoaded', () => {
+      loadPayConfig();
+    });
+
+    // 加载支付配置
+    async function loadPayConfig() {
+      const secret = getSecret();
+      try {
+        const res = await fetch('/api/admin/pay/config', {
+          headers: { 'X-Internal-Secret': secret }
+        });
+        const data = await res.json();
+        if (data.ok) {
+          payConfig = data.data;
+          renderPayConfig(payConfig);
+          updatePayConfigStatus('saved');
+          showToast('支付配置加载成功', 'success');
+        } else {
+          showToast(data.message || '加载支付配置失败', 'error');
+        }
+      } catch (err) {
+        showToast('加载支付配置异常: ' + err.message, 'error');
+      }
+    }
+
+    // 渲染支付配置到表单
+    function renderPayConfig(config) {
+      // 支付开关
+      const toggle = document.getElementById('payEnabledToggle');
+      const label = document.getElementById('payEnabledLabel');
+      if (config.enabled) {
+        toggle.classList.add('active');
+        label.textContent = '已启用';
+        label.style.color = 'var(--success)';
+      } else {
+        toggle.classList.remove('active');
+        label.textContent = '已禁用';
+        label.style.color = 'var(--text-muted)';
+      }
+
+      // 支付方式
+      selectPayType(config.pay_type || 'alipay', true);
+
+      // 网关字段
+      document.getElementById('payCfpayGateway').value = config.cfpay_gateway_url || '';
+      document.getElementById('payAlipayGateway').value = config.alipay_gateway || '';
+      document.getElementById('payAlipayAppId').value = config.alipay_app_id || '';
+      document.getElementById('payReturnUrl').value = config.return_url || '';
+      document.getElementById('payNotifyUrl').value = config.notify_url || '';
+      document.getElementById('payInternalSecret').value = config.internal_secret || '';
+
+      // 套餐列表
+      renderPlans(config.plans || []);
+    }
+
+    // 切换支付开关
+    function togglePayEnabled() {
+      const toggle = document.getElementById('payEnabledToggle');
+      const label = document.getElementById('payEnabledLabel');
+      const isActive = toggle.classList.toggle('active');
+      if (isActive) {
+        label.textContent = '已启用';
+        label.style.color = 'var(--success)';
+      } else {
+        label.textContent = '已禁用';
+        label.style.color = 'var(--text-muted)';
+      }
+      updatePayConfigStatus('unsaved');
+    }
+
+    // 选择支付方式
+    function selectPayType(type, silent) {
+      document.querySelectorAll('.pay-type-option').forEach(el => {
+        el.classList.toggle('selected', el.dataset.type === type);
+      });
+      if (!silent) updatePayConfigStatus('unsaved');
+    }
+
+    // 渲染套餐卡片列表
+    function renderPlans(plans) {
+      const container = document.getElementById('planCards');
+      if (!plans || plans.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 1rem; font-size: 0.85rem;">暂未配置任何 VIP 套餐，点击下方按钮添加</div>';
+        return;
+      }
+      let html = '';
+      plans.forEach((plan, index) => {
+        html += \`<div class="plan-card" data-index="\${index}">
+          <input type="text" value="\${escapeHtml(plan.id || '')}" placeholder="套餐 ID" title="套餐唯一标识" onchange="updatePayConfigStatus('unsaved')" />
+          <input type="text" value="\${escapeHtml(plan.name || '')}" placeholder="套餐名称" title="套餐显示名称" onchange="updatePayConfigStatus('unsaved')" />
+          <input type="number" value="\${plan.days || 0}" placeholder="天数" min="0" title="有效天数" onchange="updatePayConfigStatus('unsaved')" />
+          <input type="text" value="\${escapeHtml(plan.price || '')}" placeholder="价格" title="价格 (元)" onchange="updatePayConfigStatus('unsaved')" />
+          <input type="text" value="\${escapeHtml(plan.desc || '')}" placeholder="套餐描述" title="套餐描述" onchange="updatePayConfigStatus('unsaved')" />
+          <button type="button" class="plan-remove-btn" onclick="removePlan(\${index})" title="删除此套餐">✕</button>
+        </div>\`;
+      });
+      container.innerHTML = html;
+    }
+
+    // 添加新套餐
+    function addPlan() {
+      const container = document.getElementById('planCards');
+      // 如果当前是空提示文字，先清空
+      if (container.querySelector('.plan-card') === null) {
+        container.innerHTML = '';
+      }
+      const index = container.querySelectorAll('.plan-card').length;
+      const html = \`<div class="plan-card" data-index="\${index}">
+        <input type="text" value="" placeholder="套餐 ID (如 month)" title="套餐唯一标识" />
+        <input type="text" value="" placeholder="套餐名称 (如 月度VIP)" title="套餐显示名称" />
+        <input type="number" value="30" placeholder="天数" min="0" title="有效天数" />
+        <input type="text" value="" placeholder="价格 (如 19.90)" title="价格 (元)" />
+        <input type="text" value="" placeholder="套餐描述" title="套餐描述" />
+        <button type="button" class="plan-remove-btn" onclick="removePlan(\${index})" title="删除此套餐">✕</button>
+      </div>\`;
+      container.insertAdjacentHTML('beforeend', html);
+      updatePayConfigStatus('unsaved');
+    }
+
+    // 删除指定套餐
+    function removePlan(index) {
+      const plans = collectPlansFromForm();
+      plans.splice(index, 1);
+      renderPlans(plans);
+      updatePayConfigStatus('unsaved');
+    }
+
+    // 从表单收集套餐数据
+    function collectPlansFromForm() {
+      const cards = document.querySelectorAll('#planCards .plan-card');
+      const plans = [];
+      cards.forEach(card => {
+        const inputs = card.querySelectorAll('input');
+        plans.push({
+          id: inputs[0].value.trim(),
+          name: inputs[1].value.trim(),
+          days: parseInt(inputs[2].value) || 0,
+          price: inputs[3].value.trim(),
+          desc: inputs[4].value.trim(),
+        });
+      });
+      return plans;
+    }
+
+    // 从表单收集完整支付配置
+    function collectPayConfigFromForm() {
+      const enabled = document.getElementById('payEnabledToggle').classList.contains('active');
+      const payTypeEl = document.querySelector('.pay-type-option.selected');
+      const pay_type = payTypeEl ? payTypeEl.dataset.type : 'alipay';
+
+      return {
+        enabled,
+        pay_type,
+        cfpay_gateway_url: document.getElementById('payCfpayGateway').value.trim(),
+        alipay_gateway: document.getElementById('payAlipayGateway').value.trim(),
+        alipay_app_id: document.getElementById('payAlipayAppId').value.trim(),
+        return_url: document.getElementById('payReturnUrl').value.trim(),
+        notify_url: document.getElementById('payNotifyUrl').value.trim(),
+        internal_secret: document.getElementById('payInternalSecret').value.trim(),
+        plans: collectPlansFromForm(),
+      };
+    }
+
+    // 保存支付配置
+    async function savePayConfig() {
+      const secret = getSecret();
+      const config = collectPayConfigFromForm();
+
+      // 客户端基本校验
+      for (const plan of config.plans) {
+        if (!plan.id || !plan.name || !plan.price) {
+          showToast('套餐数据不完整：请确保每个套餐都填写了 ID、名称和价格', 'error');
+          return;
+        }
+      }
+
+      try {
+        const res = await fetch('/api/admin/pay/config', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Secret': secret,
+          },
+          body: JSON.stringify(config),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          payConfig = data.data;
+          updatePayConfigStatus('saved');
+          showToast('支付配置保存成功', 'success');
+        } else {
+          showToast(data.message || '保存失败', 'error');
+        }
+      } catch (err) {
+        showToast('保存支付配置异常: ' + err.message, 'error');
+      }
+    }
+
+    // 恢复默认配置
+    async function resetPayConfig() {
+      if (!confirm('确定要恢复为默认支付配置吗？当前配置将被覆盖。')) return;
+
+      const secret = getSecret();
+      const defaultConfig = {
+        enabled: true,
+        pay_type: 'alipay',
+        cfpay_gateway_url: 'https://cfpay.accessible-grenadilla.workers.dev/api/pay/create',
+        alipay_gateway: 'https://openapi.alipay.com/gateway.do',
+        alipay_app_id: '2021007121650658',
+        return_url: 'https://your-domain.com/#/profile',
+        notify_url: '',
+        internal_secret: '',
+        plans: [
+          { id: 'month', name: '月度 VIP', days: 30, price: '19.90', desc: '畅享 30 天无限制高清播放', badge: '尝鲜' },
+          { id: 'quarter', name: '季度 VIP', days: 90, price: '49.90', desc: '畅享 90 天无限制高清播放', badge: '特惠' },
+          { id: 'year', name: '年度 VIP', days: 365, price: '99.00', desc: '畅享 365 天无限制高清播放', badge: '超值' },
+        ],
+      };
+
+      try {
+        const res = await fetch('/api/admin/pay/config', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Secret': secret,
+          },
+          body: JSON.stringify(defaultConfig),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          payConfig = data.data;
+          renderPayConfig(payConfig);
+          updatePayConfigStatus('saved');
+          showToast('已恢复默认支付配置', 'success');
+        } else {
+          showToast(data.message || '恢复失败', 'error');
+        }
+      } catch (err) {
+        showToast('恢复默认配置异常: ' + err.message, 'error');
+      }
+    }
+
+    // 更新配置保存状态标记
+    function updatePayConfigStatus(status) {
+      const el = document.getElementById('payConfigStatus');
+      el.style.display = 'inline-flex';
+      if (status === 'saved') {
+        el.className = 'config-status saved';
+        el.textContent = '● 已保存';
+      } else {
+        el.className = 'config-status unsaved';
+        el.textContent = '● 未保存';
+      }
     }
   </script>
 </body>

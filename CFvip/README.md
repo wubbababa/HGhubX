@@ -3,8 +3,9 @@
 ## 📋 功能概述
 - **管理后台页面**：直接访问 `/admin` 即可打开现代化 VIP 用户管理面板。
 - **手动设置 VIP**：支持在后台输入用户名、自选开通/取消、快捷设置开通天数（7天、30天月卡、90天季卡、365年卡、永久VIP），并在已有有效期基础上自动顺延，支持添加操作备注。
-- **用户列表与快捷操作**：后台实时展示 KV 存储中的 VIP 用户列表、到期时间、状态 Badge，并提供“编辑”、“取消 VIP”及“快捷续费”操作。
+- **用户列表与快捷操作**：后台实时展示 KV 存储中的 VIP 用户列表、到期时间、状态 Badge，并提供"编辑"、"取消 VIP"及"快捷续费"操作。
 - **快速查询**：可在后台输入任意用户名一键核查 VIP 状态及到期时间。
+- **支付参数配置**：管理后台支持可视化配置支付开关、支付方式、网关地址、支付宝参数、回调地址及 VIP 套餐列表，配置持久存储在 KV 中。
 - **判断是否为 VIP**：公开接口 `/api/vip/check?username=xxx` 供客户端或业务系统快速读取 VIP 状态。
 - **接收支付同步**：受保护接口 `/api/vip/sync` 供支付平台（如 `CFpay`）在支付成功后自动同步 VIP。
 
@@ -66,3 +67,49 @@
 ### 5. 支付同步接口（供支付系统调用）
 - **POST `/api/vip/sync`**
 - **Header**：`X-Internal-Secret: <INTERNAL_SECRET>`
+
+### 6. 获取支付配置（管理员）
+- **GET `/api/admin/pay/config`**
+- **Header**：`X-Internal-Secret: <INTERNAL_SECRET>`
+- **返回**：完整的支付配置 JSON，包括支付开关、网关地址、套餐列表等全部字段。
+  ```json
+  {
+    "ok": true,
+    "data": {
+      "enabled": true,
+      "pay_type": "alipay",
+      "cfpay_gateway_url": "https://cfpay.xxx.workers.dev/api/pay/create",
+      "alipay_gateway": "https://openapi.alipay.com/gateway.do",
+      "alipay_app_id": "2021007121650658",
+      "return_url": "https://your-domain.com/#/profile",
+      "notify_url": "",
+      "internal_secret": "",
+      "plans": [
+        { "id": "month", "name": "月度 VIP", "days": 30, "price": "19.90", "desc": "...", "badge": "尝鲜" }
+      ],
+      "updated_at": "2026-11-24T03:00:00.000Z"
+    }
+  }
+  ```
+
+### 7. 更新支付配置（管理员）
+- **POST `/api/admin/pay/config`**
+- **Header**：`X-Internal-Secret: <INTERNAL_SECRET>`
+- **Body**：支持部分更新，只传需要修改的字段即可。
+  ```json
+  {
+    "enabled": true,
+    "pay_type": "alipay",
+    "cfpay_gateway_url": "https://cfpay.xxx.workers.dev/api/pay/create",
+    "plans": [
+      { "id": "month", "name": "月度 VIP", "days": 30, "price": "19.90", "desc": "畅享 30 天" }
+    ]
+  }
+  ```
+
+### 8. 公开获取前端支付配置
+- **GET `/api/pay/config`**
+- 无需鉴权，仅返回前端需要的字段（启用状态、支付方式、套餐列表、跳转地址、网关地址），不暴露密钥等敏感信息。
+
+### 9. 用户 VIP 详细信息
+- **GET `/api/vip/info?username={用户名}`**
