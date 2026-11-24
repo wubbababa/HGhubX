@@ -29,6 +29,50 @@ export default {
       return jsonResponse({ ok: true }, 200);
     }
 
+    // 0. 测试是否开通「当面付」(alipay.trade.precreate 扫码支付)
+    if (url.pathname === "/api/pay/test-precreate" && (request.method === "GET" || request.method === "POST")) {
+      try {
+        const orderId = `TEST_F2F_${Date.now()}`;
+        const bizContent = JSON.stringify({
+          out_trade_no: orderId,
+          total_amount: "0.01",
+          subject: "当面付开通检测",
+        });
+
+        const commonParams = {
+          app_id: env.ALIPAY_APP_ID,
+          method: "alipay.trade.precreate",
+          format: "JSON",
+          charset: "utf-8",
+          sign_type: "RSA2",
+          timestamp: getAlipayTimestamp(),
+          version: "1.0",
+          biz_content: bizContent,
+        };
+
+        const sign = await signParams(commonParams, env.ALIPAY_PRIVATE_KEY);
+        const queryParams = new URLSearchParams({ ...commonParams, sign });
+        const gateway = env.ALIPAY_GATEWAY || "https://openapi.alipay.com/gateway.do";
+
+        const resp = await fetch(`${gateway}?${queryParams.toString()}`);
+        const result = await resp.json();
+
+        const precreateResp = result?.alipay_trade_precreate_response;
+        const isSuccess = precreateResp?.code === "10000";
+
+        return jsonResponse({
+          ok: true,
+          has_precreate: isSuccess,
+          summary: isSuccess
+            ? "恭喜！你的账号已成功开通「当面付」(扫码支付能力)"
+            : `未开通当面付或调用受限: [${precreateResp?.sub_code || precreateResp?.code}] ${precreateResp?.sub_msg || precreateResp?.msg}`,
+          alipay_response: precreateResp,
+        });
+      } catch (err) {
+        return jsonResponse({ ok: false, message: `探测异常: ${err.message}` }, 500);
+      }
+    }
+
     // 1. 创建支付订单并生成支付宝支付页面链接
     if (url.pathname === "/api/pay/create" && request.method === "POST") {
       let body;

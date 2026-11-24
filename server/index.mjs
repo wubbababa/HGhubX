@@ -160,29 +160,56 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
       });
     }
     case "api_tag_videos": {
-      return forwardEdgeRequest({
-        origin: currentBase,
-        method: "GET",
-        path: `/api/tags/${encodeURIComponent(args.tag || "")}/videos?page=${args.page || 1}&size=${args.size || 20}`,
-        token,
-      });
+      try {
+        return await forwardEdgeRequest({
+          origin: currentBase,
+          method: "GET",
+          path: `/api/videos/tag/${encodeURIComponent(args.tag || "")}?page=${args.page || 1}&size=${args.size || 20}`,
+          token,
+        });
+      } catch {
+        return await forwardEdgeRequest({
+          origin: currentBase,
+          method: "GET",
+          path: `/api/tags/${encodeURIComponent(args.tag || "")}/videos?page=${args.page || 1}&size=${args.size || 20}`,
+          token,
+        });
+      }
     }
     case "api_post_tag": {
-      return forwardEdgeRequest({
-        origin: currentBase,
-        method: "GET",
-        path: `/api/community/tags/${encodeURIComponent(args.tag || "")}/posts?page=${args.page || 1}&size=${args.size || 20}`,
-        token,
-      });
+      try {
+        return await forwardEdgeRequest({
+          origin: currentBase,
+          method: "GET",
+          path: `/api/posts/tag/${encodeURIComponent(args.tag || "")}?page=${args.page || 1}&size=${args.size || 20}`,
+          token,
+        });
+      } catch {
+        return await forwardEdgeRequest({
+          origin: currentBase,
+          method: "GET",
+          path: `/api/community/tags/${encodeURIComponent(args.tag || "")}/posts?page=${args.page || 1}&size=${args.size || 20}`,
+          token,
+        });
+      }
     }
     case "api_category": {
       const sortParam = args.sort ? `&sort=${encodeURIComponent(args.sort)}` : "";
-      return forwardEdgeRequest({
-        origin: currentBase,
-        method: "GET",
-        path: `/api/category/${encodeURIComponent(args.cate || "")}?page=${args.page || 1}&size=${args.size || 20}${sortParam}`,
-        token,
-      });
+      try {
+        return await forwardEdgeRequest({
+          origin: currentBase,
+          method: "GET",
+          path: `/api/videos/category/${encodeURIComponent(args.cate || "")}?page=${args.page || 1}&size=${args.size || 20}${sortParam}`,
+          token,
+        });
+      } catch {
+        return await forwardEdgeRequest({
+          origin: currentBase,
+          method: "GET",
+          path: `/api/category/${encodeURIComponent(args.cate || "")}?page=${args.page || 1}&size=${args.size || 20}${sortParam}`,
+          token,
+        });
+      }
     }
     case "api_original_videos": {
       const sortParam = args.sort ? `&sort=${encodeURIComponent(args.sort)}` : "";
@@ -194,12 +221,22 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
       });
     }
     case "api_rank": {
-      return forwardEdgeRequest({
-        origin: currentBase,
-        method: "GET",
-        path: `/api/rank?kind=${encodeURIComponent(args.kind || "hot")}`,
-        token,
-      });
+      const kind = args.kind || "hot";
+      try {
+        return await forwardEdgeRequest({
+          origin: currentBase,
+          method: "GET",
+          path: `/api/ranks/${encodeURIComponent(kind)}`,
+          token,
+        });
+      } catch {
+        return await forwardEdgeRequest({
+          origin: currentBase,
+          method: "GET",
+          path: `/api/rank?kind=${encodeURIComponent(kind)}`,
+          token,
+        });
+      }
     }
     case "api_search": {
       const kindParam = args.kind ? `&kind=${encodeURIComponent(args.kind)}` : "";
@@ -444,9 +481,53 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
       return {
         base: currentBase,
         default: DEFAULT_BASE,
-        fixed: [{ name: "官方主线路", url: DEFAULT_BASE, host: new URL(DEFAULT_BASE).host }],
+        fixed: [
+          { name: "官方主线路", url: DEFAULT_BASE, host: new URL(DEFAULT_BASE).host },
+        ],
         custom: currentBase !== DEFAULT_BASE,
       };
+    }
+    case "line_mirrors": {
+      return {
+        source: "https://huang-guo.pages.dev/",
+        items: [
+          { name: "官方主线路", url: DEFAULT_BASE, host: new URL(DEFAULT_BASE).host },
+        ],
+        recommended_source: "https://huang-guo.pages.dev/",
+        recommended: [
+          { name: "官方主线路", url: DEFAULT_BASE, host: new URL(DEFAULT_BASE).host },
+        ],
+      };
+    }
+    case "line_probe": {
+      const urls = Array.isArray(args.urls) ? args.urls : [];
+      const results = [];
+      for (const u of urls) {
+        const start = Date.now();
+        try {
+          await fetch(`${u.replace(/\/+$/, "")}/api/videos?page=1&size=1`, {
+            method: "GET",
+            headers: { "User-Agent": "Mozilla/5.0" },
+          });
+          results.push({ url: u, ok: true, status: 200, ms: Date.now() - start });
+        } catch (e) {
+          results.push({ url: u, ok: false, ms: Date.now() - start, error: e.message });
+        }
+      }
+      return results;
+    }
+    case "line_health": {
+      const start = Date.now();
+      try {
+        await forwardEdgeRequest({
+          origin: currentBase,
+          method: "GET",
+          path: "/api/videos?page=1&size=1",
+        });
+        return { base: currentBase, ok: true, ms: Date.now() - start, status: 200 };
+      } catch (e) {
+        return { base: currentBase, ok: false, ms: Date.now() - start, status: null };
+      }
     }
     case "line_set":
     case "line_custom_set": {
@@ -511,6 +592,67 @@ export async function dispatchServerRequest(req, res, prefix = "") {
         res.statusCode = 500;
         res.setHeader("Content-Type", "application/json; charset=utf-8");
         res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return true;
+  }
+
+  // 1.1 /api/edge/request (兼容旧版手机 App 信封请求网关)
+  if (pathname === "/api/edge/request" && req.method === "POST") {
+    let bodyText = "";
+    req.on("data", (chunk) => { bodyText += chunk; });
+    req.on("end", async () => {
+      try {
+        const envelope = bodyText ? JSON.parse(bodyText) : {};
+        let decodedBody = undefined;
+        if (envelope.body) {
+          try {
+            decodedBody = JSON.parse(Buffer.from(envelope.body, "base64").toString("utf8"));
+          } catch {
+            decodedBody = {};
+          }
+        }
+        let auth = req.headers.authorization || "";
+        let token = "";
+        if (auth.startsWith("Bearer ")) token = auth.slice(7);
+
+        let p = envelope.path || "";
+        // 自动兼容新版路由别名
+        if (p.startsWith("/api/rank?kind=")) {
+          const u = new URL(`http://localhost${p}`);
+          p = `/api/ranks/${u.searchParams.get("kind") || "hot"}`;
+        } else if (p.startsWith("/api/tags/") && p.endsWith("/videos")) {
+          const m = p.match(/^\/api\/tags\/([^/]+)\/videos/);
+          if (m) p = `/api/videos/tag/${m[1]}`;
+        } else if (p.startsWith("/api/category/")) {
+          p = p.replace(/^\/api\/category\//, "/api/videos/category/");
+        }
+
+        const data = await forwardEdgeRequest({
+          origin: currentBase,
+          method: envelope.method || "GET",
+          path: p,
+          body: decodedBody,
+          token,
+        });
+
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.end(JSON.stringify({
+          status: 1,
+          msg: "",
+          data: data,
+          req_time: Math.floor(Date.now() / 1000),
+        }));
+      } catch (err) {
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.end(JSON.stringify({
+          status: 0,
+          msg: err.message || "请求失败",
+          data: null,
+          req_time: Math.floor(Date.now() / 1000),
+        }));
       }
     });
     return true;

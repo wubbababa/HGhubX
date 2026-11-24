@@ -8,20 +8,14 @@ const imgCache = new Map();
 const plCache = new Map();
 
 /**
- * 转发信封请求到上游站点 /api/edge/request
+ * 向上游站点发起业务接口请求（兼容直连与信封代理）
  */
-export async function forwardEdgeRequest({ origin = DEFAULT_BASE, method, path, body, token }) {
+export async function forwardEdgeRequest({ origin = DEFAULT_BASE, method = "GET", path, body, token }) {
   const cur = origin.replace(/\/+$/, "");
-  const envelope = {
-    method: method || "GET",
-    path: path || "",
-    body: body ? Buffer.from(JSON.stringify(body)).toString("base64") : "",
-    content_type: body ? "application/json" : "",
-  };
+  const targetUrl = path.startsWith("http") ? path : `${cur}${path.startsWith("/") ? "" : "/"}${path}`;
 
   const headers = {
-    "Accept": "application/json",
-    "Content-Type": "application/json",
+    "Accept": "application/json, text/plain, */*",
     "Referer": `${cur}/`,
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   };
@@ -30,13 +24,18 @@ export async function forwardEdgeRequest({ origin = DEFAULT_BASE, method, path, 
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const upstreamUrl = `${cur}/api/edge/request`;
-  const res = await fetch(upstreamUrl, {
-    method: "POST",
+  const httpMethod = (method || "GET").toUpperCase();
+  const options = {
+    method: httpMethod,
     headers,
-    body: JSON.stringify(envelope),
-  });
+  };
 
+  if (httpMethod !== "GET" && httpMethod !== "HEAD") {
+    headers["Content-Type"] = "application/json";
+    options.body = body !== undefined && body !== null ? JSON.stringify(body) : JSON.stringify({});
+  }
+
+  const res = await fetch(targetUrl, options);
   const text = await res.text();
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}: ${text.slice(0, 160)}`);
@@ -50,7 +49,13 @@ export async function forwardEdgeRequest({ origin = DEFAULT_BASE, method, path, 
     const json = JSON.parse(text);
     if (!json) return null;
     if (json.status === 1) {
-      return json.data ?? null;
+      return json.data !== undefined ? json.data : json;
+    }
+    if (json.status === undefined && json.data !== undefined) {
+      return json.data;
+    }
+    if (json.status === undefined) {
+      return json;
     }
     throw new Error(json.msg || "接口返回失败");
   } catch (err) {
