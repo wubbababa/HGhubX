@@ -81,10 +81,14 @@ export const setNetObserver = (fn: NetObserver | null) => { netObserver = fn; };
 const notifyNet = (r: Parameters<NetObserver>[0]) => {
   try { netObserver?.(r); } catch { /* 观察者不能影响请求本身 */ }
 };
-const failMessage = (msg: string, status?: string) =>
-  status
+const failMessage = (msg: string, status?: string) => {
+  if (status === "401" || status === "403" || msg === "401" || /unauthorized/i.test(msg)) {
+    return "登录状态已过期，请重新登录";
+  }
+  return status
     ? `服务器请求失败（HTTP ${status}），请稍后重试或在设置中切换线路`
     : msg.length > 140 ? `${msg.slice(0, 140)}…` : msg;
+};
 
 const WEB_AUTH_TOKEN_KEY = "hghubx_web_token";
 
@@ -173,6 +177,10 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
         tracePlayback("api.retry_failed", { cmd, err: again, status: againStatus ?? null });
         throw new Error(failMessage(again, againStatus));
       }
+    }
+    if (status === "401" || status === "403" || msg === "401" || /unauthorized/i.test(msg)) {
+      if (!isTauriApp) setWebToken(null);
+      try { window.dispatchEvent(new CustomEvent("hg:auth-expired")); } catch {}
     }
     throw new Error(failMessage(msg, status));
   }

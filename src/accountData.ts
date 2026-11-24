@@ -332,10 +332,17 @@ export function useAccountData(initialGuest: GuestData, saveGuest: (data: GuestD
   useEffect(() => {
     mounted.current = true;
     const refresh = () => { if (document.visibilityState !== "hidden") void syncRef.current().catch(() => {}); };
+    const onAuthExpired = () => {
+      if (mounted.current && state.current?.user) {
+        setUser(null);
+      }
+    };
     window.addEventListener("focus", refresh); window.addEventListener("online", refresh); document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("hg:auth-expired", onAuthExpired);
     return () => { mounted.current = false; window.clearTimeout(flushTimer.current); window.clearTimeout(syncTimer.current);
-      window.removeEventListener("focus", refresh); window.removeEventListener("online", refresh); document.removeEventListener("visibilitychange", refresh); };
-  }, []);
+      window.removeEventListener("focus", refresh); window.removeEventListener("online", refresh); document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("hg:auth-expired", onAuthExpired); };
+  }, [setUser]);
   const s = state.current;
   return { user: s.user, setUser, restoreSession, generation, logout, accountScope: `${s.key}:${s.generation}`, accountSync: s.sync,
     syncAccount, likes: s.data.likes, favs: s.data.favs, follows: s.data.follows, history: s.data.history,
