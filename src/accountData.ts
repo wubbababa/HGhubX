@@ -63,13 +63,29 @@ export function useAccountData(initialGuest: GuestData, saveGuest: (data: GuestD
   const accounts = useRef<Record<string, AccountData>>({});
   const guest = useRef(sanitize(initialGuest));
   if (!state.current) {
+    let initialUser: User | null = null;
+    let initialOrigin = "";
+    try {
+      const savedUserStr = localStorage.getItem("hghubx_web_user");
+      const savedToken = localStorage.getItem("hghubx_web_token");
+      if (savedUserStr && savedToken) {
+        const parsed = JSON.parse(savedUserStr);
+        const uid = Number(parsed?.id);
+        if (Number.isSafeInteger(uid) && uid > 0) {
+          initialUser = { ...parsed, id: uid };
+          initialOrigin = localStorage.getItem("hghubx_web_origin") || "";
+        }
+      }
+    } catch { /* ignore */ }
     try {
       const saved = JSON.parse(localStorage.getItem(ACCOUNT_KEY) || "{}");
       if (saved.version === 1 && saved.accounts && typeof saved.accounts === "object") {
         accounts.current = Object.fromEntries(Object.entries(saved.accounts).map(([key, data]) => [key, sanitize(data as AccountData)]));
       }
     } catch { /* A damaged account cache must not erase legacy guest records. */ }
-    state.current = { user: null, origin: "", key: "guest", generation: 0, data: guest.current, sync: { busy: false, error: "", lastSynced: 0, favoritesKnown: false } };
+    const key = initialUser ? JSON.stringify([initialOrigin, initialUser.id]) : "guest";
+    const initialData = initialUser ? accounts.current[key] || applyInteractions(empty(), initialUser.interactions) : guest.current;
+    state.current = { user: initialUser, origin: initialOrigin, key, generation: 0, data: initialData, sync: { busy: false, error: "", lastSynced: 0, favoritesKnown: false } };
   }
   const pending = useRef(new Map<string, Promise<void>>());
   const mutation = useRef(0);
@@ -220,7 +236,8 @@ export function useAccountData(initialGuest: GuestData, saveGuest: (data: GuestD
   const setUser = useCallback((user: User | null, origin?: string) => {
     const s = state.current!;
     const nextOrigin = origin ?? s.origin;
-    const next = user && Number.isSafeInteger(user.id) && user.id > 0 ? user : null;
+    const numId = user ? Number(user.id) : 0;
+    const next = user && Number.isSafeInteger(numId) && numId > 0 ? { ...user, id: numId } : null;
     const key = next ? JSON.stringify([nextOrigin, next.id]) : "guest";
     window.clearTimeout(flushTimer.current); flushTimer.current = undefined;
     window.clearTimeout(syncTimer.current);
@@ -229,19 +246,43 @@ export function useAccountData(initialGuest: GuestData, saveGuest: (data: GuestD
     s.data = next ? accounts.current[key] || applyInteractions(empty(), next.interactions) : guest.current;
     s.sync = { busy: false, error: "", lastSynced: 0, favoritesKnown: false };
     sentHistory.current.clear(); pending.current.clear(); needsResync.current = false; storageError.current = "";
+    if (next) {
+      try {
+        localStorage.setItem("hghubx_web_user", JSON.stringify(next));
+        if (nextOrigin) localStorage.setItem("hghubx_web_origin", nextOrigin);
+      } catch { /* ignore */ }
+    } else {
+      try {
+        localStorage.removeItem("hghubx_web_user");
+        localStorage.removeItem("hghubx_web_origin");
+      } catch { /* ignore */ }
+    }
     render();
     if (next) void syncRef.current().catch(() => {});
   }, []);
   const generation = useCallback(() => state.current!.generation, []);
   const restoreSession = useCallback((user: User | null, origin: string, expectedGeneration: number) => {
     if (!isCurrent(expectedGeneration)) return;
-    if (!user && !state.current!.user) { state.current!.origin = origin; return; }
-    setUser(user, origin);
+    if (user && Number.isSafeInteger(Number(user.id)) && Number(user.id) > 0) {
+      setUser(user, origin);
+    } else if (!user) {
+      // 只有在明确未登录且本地也没有合法 token 时，才清空 user
+      const token = typeof localStorage !== "undefined" ? localStorage.getItem("hghubx_web_token") : null;
+      if (!token) {
+        if (!state.current!.user) { state.current!.origin = origin; return; }
+        setUser(null, origin);
+      }
+    }
   }, [setUser]);
   const logout = useCallback(async () => {
     const version = state.current!.generation;
     await api.logout(state.current!.user ? identity() : undefined);
     if (!isCurrent(version)) throw new Error("账号已切换");
+    try {
+      localStorage.removeItem("hghubx_web_token");
+      localStorage.removeItem("hghubx_web_user");
+      localStorage.removeItem("hghubx_web_origin");
+    } catch { /* ignore */ }
     setUser(null);
   }, [setUser]);
   const mutate = (key: string, request: (auth: AccountIdentity) => Promise<unknown>, update: (data: AccountData) => AccountData) => {

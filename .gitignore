@@ -33,5 +33,8 @@ docs/API.md
 .wrangler/
 */.wrangler/
 
+# Server 运行时会话持久化
+server/sessions.json
+
 # Agent instructions (local)
 AGENTS.md

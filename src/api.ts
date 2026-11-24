@@ -137,10 +137,20 @@ async function webInvoke<T>(cmd: string, args?: Record<string, unknown>): Promis
   }
   const result = (await res.json()) as T;
   if (!isTauriApp && (cmd === "api_login" || cmd === "api_register")) {
-    const snap = result as { token?: string };
+    const snap = result as { token?: string; user?: unknown; origin?: string };
     if (snap?.token) setWebToken(snap.token);
+    if (snap?.user && typeof snap.user === "object") {
+      try {
+        localStorage.setItem("hghubx_web_user", JSON.stringify(snap.user));
+        if (snap.origin) localStorage.setItem("hghubx_web_origin", snap.origin);
+      } catch { /* ignore */ }
+    }
   } else if (!isTauriApp && cmd === "api_logout") {
     setWebToken(null);
+    try {
+      localStorage.removeItem("hghubx_web_user");
+      localStorage.removeItem("hghubx_web_origin");
+    } catch { /* ignore */ }
   }
   return result;
 }
@@ -179,7 +189,13 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
       }
     }
     if (status === "401" || status === "403" || msg === "401" || /unauthorized/i.test(msg)) {
-      if (!isTauriApp) setWebToken(null);
+      if (!isTauriApp) {
+        setWebToken(null);
+        try {
+          localStorage.removeItem("hghubx_web_user");
+          localStorage.removeItem("hghubx_web_origin");
+        } catch { /* ignore */ }
+      }
       try { window.dispatchEvent(new CustomEvent("hg:auth-expired")); } catch {}
     }
     throw new Error(failMessage(msg, status));

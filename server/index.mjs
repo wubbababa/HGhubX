@@ -13,9 +13,39 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DIST_DIR = path.resolve(__dirname, "../dist");
+const SESSIONS_FILE = path.resolve(__dirname, "sessions.json");
 
 let currentBase = DEFAULT_BASE;
 const activeSessions = new Map(); // token -> session info
+
+function loadSessionsFromDisk() {
+  try {
+    if (fs.existsSync(SESSIONS_FILE)) {
+      const content = fs.readFileSync(SESSIONS_FILE, "utf-8");
+      const list = JSON.parse(content);
+      if (Array.isArray(list)) {
+        for (const item of list) {
+          if (item?.token && item?.user?.id) {
+            activeSessions.set(item.token, item);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[server] 加载 sessions.json 失败:", e.message);
+  }
+}
+
+function saveSessionsToDisk() {
+  try {
+    const list = Array.from(activeSessions.values());
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(list, null, 2), "utf-8");
+  } catch (e) {
+    console.error("[server] 保存 sessions.json 失败:", e.message);
+  }
+}
+
+loadSessionsFromDisk();
 
 function normalizeAccount(data, origin) {
   const source = data?.user && typeof data.user === "object" ? data.user : data;
@@ -23,9 +53,12 @@ function normalizeAccount(data, origin) {
   for (const key of ["id", "username", "nickname", "avatar", "avatar_color", "sign", "desc", "user_type", "counts", "interactions"]) {
     if (source && source[key] !== undefined) user[key] = source[key];
   }
+  if (user.id !== undefined && user.id !== null) {
+    user.id = Number(user.id);
+  }
   const interactions = data?.interactions || user.interactions;
   if (interactions) user.interactions = interactions;
-  const tok = data?.token || source?.token || data?.user?.token;
+  const tok = data?.token || source?.token || data?.user?.token || data?.access_token || source?.access_token || data?.jwt || data?.auth_token;
   return {
     user,
     origin,
@@ -55,8 +88,8 @@ function normalizeAccountHistory(value) {
  */
 export async function executeCommand(cmd, args = {}, authHeader = "") {
   let token = null;
-  if (authHeader.startsWith("Bearer ")) {
-    token = authHeader.slice(7);
+  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+    token = authHeader.slice(7).trim();
   }
 
   switch (cmd) {
@@ -80,6 +113,7 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
               user = normalized.user;
               logged_in = true;
               activeSessions.set(token, { user: normalized.user, token });
+              saveSessionsToDisk();
             }
           } catch {
             user = null;
@@ -104,8 +138,9 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
       });
       const normalized = normalizeAccount(res, currentBase);
       const tok = normalized.token || res?.token;
-      if (tok) {
+      if (tok && normalized.user?.id) {
         activeSessions.set(tok, { user: normalized.user, token: tok });
+        saveSessionsToDisk();
       }
       return normalized;
     }
@@ -123,8 +158,9 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
       });
       const normalized = normalizeAccount(res, currentBase);
       const tok = normalized.token || res?.token;
-      if (tok) {
+      if (tok && normalized.user?.id) {
         activeSessions.set(tok, { user: normalized.user, token: tok });
+        saveSessionsToDisk();
       }
       return normalized;
     }
@@ -139,6 +175,7 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
           });
         } catch { /* 忽略上游退出错误 */ }
         activeSessions.delete(token);
+        saveSessionsToDisk();
       }
       return { ok: true };
     }
@@ -152,6 +189,7 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
       const normalized = normalizeAccount(res, currentBase);
       if (token && normalized.user?.id) {
         activeSessions.set(token, { user: normalized.user, token });
+        saveSessionsToDisk();
       }
       return normalized;
     }
@@ -567,6 +605,32 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
     case "line_reset": {
       currentBase = DEFAULT_BASE;
       return { base: currentBase, custom: false };
+    }
+    case "line_auto": {
+      return {
+        base: currentBase,
+        switched: false,
+        cancelled: false,
+        pick: {
+          tier: "main",
+          ms: 50,
+          reason: "ok",
+          candidates: [
+            { tier: "main", ok: true, reachable: true, ms: 50 }
+          ]
+        }
+      };
+    }
+    case "line_try_main": {
+      return {
+        base: currentBase,
+        switched: false,
+        cancelled: false,
+        probe: { ok: true, ms: 50 }
+      };
+    }
+    case "line_cancel": {
+      return { ok: true };
     }
     case "proxy_state": {
       return { mode: "off", url: "" };

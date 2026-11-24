@@ -49,9 +49,17 @@ export async function forwardEdgeRequest({ origin = DEFAULT_BASE, method = "GET"
     const json = JSON.parse(text);
     if (!json) return null;
     if (json.status === 1) {
+      if (json.data && typeof json.data === "object" && !Array.isArray(json.data)) {
+        if (json.token && !json.data.token) json.data.token = json.token;
+        if (json.access_token && !json.data.access_token) json.data.access_token = json.access_token;
+      }
       return json.data !== undefined ? json.data : json;
     }
     if (json.status === undefined && json.data !== undefined) {
+      if (json.data && typeof json.data === "object" && !Array.isArray(json.data)) {
+        if (json.token && !json.data.token) json.data.token = json.token;
+        if (json.access_token && !json.data.access_token) json.data.access_token = json.access_token;
+      }
       return json.data;
     }
     if (json.status === undefined) {
