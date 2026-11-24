@@ -82,9 +82,10 @@ const notifyNet = (r: Parameters<NetObserver>[0]) => {
   try { netObserver?.(r); } catch { /* 观察者不能影响请求本身 */ }
 };
 const failMessage = (msg: string, status?: string) => {
-  if (status === "401" || status === "403" || msg === "401" || /unauthorized/i.test(msg)) {
+  if (status === "401" || msg === "401" || /unauthorized/i.test(msg)) {
     return "登录状态已过期，请重新登录";
   }
+  if (status === "403") return "没有权限访问该内容";
   return status
     ? `服务器请求失败（HTTP ${status}），请稍后重试或在设置中切换线路`
     : msg.length > 140 ? `${msg.slice(0, 140)}…` : msg;
@@ -156,7 +157,11 @@ async function webInvoke<T>(cmd: string, args?: Record<string, unknown>): Promis
 }
 
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  const once = () => (isTauriApp ? (invoke(cmd, args) as Promise<T>) : webInvoke<T>(cmd, args));
+  let requestToken: string | null = null;
+  const once = () => {
+    if (!isTauriApp) requestToken = getWebToken();
+    return isTauriApp ? (invoke(cmd, args) as Promise<T>) : webInvoke<T>(cmd, args);
+  };
   try {
     const r = await once();
     notifyNet({ ok: true, cmd });
@@ -188,7 +193,12 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
         throw new Error(failMessage(again, againStatus));
       }
     }
-    if (status === "401" || status === "403" || msg === "401" || /unauthorized/i.test(msg)) {
+    // A 401 from a content or auxiliary endpoint does not prove that the
+    // session is invalid. Only the canonical account probe may clear persisted
+    // credentials; otherwise one failing endpoint would log the user out.
+    const sessionInvalid = status === "401" || msg === "401" || /unauthorized/i.test(msg);
+    const currentToken = getWebToken();
+    if (sessionInvalid && cmd === "api_me" && !!requestToken && currentToken === requestToken) {
       if (!isTauriApp) {
         setWebToken(null);
         try {

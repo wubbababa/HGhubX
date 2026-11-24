@@ -24,6 +24,7 @@
     "test:ios-overlays": "node scripts/test-ios-overlays.mjs",
     "test:diagnostic-copy": "node scripts/test-diagnostic-copy.mjs",
     "test:storage-migration": "node scripts/test-storage-migration.mjs",
+    "test:web-auth-persistence": "node scripts/test-web-auth-persistence.mjs",
     "test:line-selection": "node scripts/test-line-selection.mjs",
     "test:network-settings": "node scripts/test-network-settings.mjs",
     "tauri": "tauri",
