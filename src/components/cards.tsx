@@ -39,7 +39,7 @@ export function MediaCard({ title, cover, subtitle, badge, progress, score, prio
 export function WaterfallCard({ v, onOpen, priority = false }: { v: VideoCard; onOpen: () => void; priority?: boolean }) {
   return <MediaCard title={v.title} cover={v.cover} onOpen={onOpen} priority={priority} score={v.score}
     badge={v.is_finished ? "已完结" : `更新至 ${v.episode_count} 集`}
-    subtitle={v.tags?.slice(0, 2).join(" · ") || v.author?.name || "HGhubX"}
+    subtitle={v.tags?.slice(0, 2).join(" · ") || v.author?.name || "黄果"}
     progress={`${fmt(v.hot)} 次播放`} />;
 }
 

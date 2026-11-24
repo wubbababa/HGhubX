@@ -242,7 +242,7 @@ export function RankPage({ onBack, wide }: { onBack: () => void; wide: boolean }
             <div>
               <div className="flex items-center gap-2">
                 <span className="w-9 h-9 rounded-(--r-sm) bg-pc text-on-pc flex items-center justify-center"><ITrophy size={20} /></span>
-                <h1 className="text-[24px] font-bold tracking-wide text-on">HGhubX 热榜</h1>
+                <h1 className="text-[24px] font-bold tracking-wide text-on">黄果热榜</h1>
               </div>
               <div className="text-[12px] text-mut mt-1">{meta.desc}</div>
             </div>

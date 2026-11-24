@@ -118,7 +118,7 @@ export default function ProxySettings() {
       <Button aria-label="关闭代理设置" disabled={!!busy} onClick={close} className="min-h-12 min-w-12 flex items-center justify-center"><IClose size={18} /></Button>
     </div>
     <form className="scroll-y px-4 pb-5 space-y-4" onSubmit={(event) => { event.preventDefault(); void run("save"); }}>
-      <p className="text-[13px] text-mut leading-relaxed">只应用于 HGhubX。测试当前草稿的连通性后，可保存为应用的网络设置。</p>
+      <p className="text-[13px] text-mut leading-relaxed">只应用于 黄果。测试当前草稿的连通性后，可保存为应用的网络设置。</p>
       {loadError && <div role="alert" className="text-[13px] text-danger">
         {loadError}
         <Button onClick={() => { void read(true); }} disabled={loading} className="min-h-12 px-3 ml-1 text-primary">重新读取</Button>

@@ -25,11 +25,12 @@ function normalizeAccount(data, origin) {
   }
   const interactions = data?.interactions || user.interactions;
   if (interactions) user.interactions = interactions;
+  const tok = data?.token || source?.token || data?.user?.token;
   return {
     user,
     origin,
     interactions,
-    token: data?.token,
+    token: tok,
   };
 }
 
@@ -60,10 +61,35 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
 
   switch (cmd) {
     case "app_boot": {
-      const sess = token && activeSessions.has(token) ? activeSessions.get(token) : null;
+      let user = null;
+      let logged_in = false;
+      if (token) {
+        if (activeSessions.has(token)) {
+          user = activeSessions.get(token).user;
+          logged_in = true;
+        } else {
+          try {
+            const res = await forwardEdgeRequest({
+              origin: currentBase,
+              method: "GET",
+              path: "/api/account/me",
+              token,
+            });
+            const normalized = normalizeAccount(res, currentBase);
+            if (normalized?.user?.id) {
+              user = normalized.user;
+              logged_in = true;
+              activeSessions.set(token, { user: normalized.user, token });
+            }
+          } catch {
+            user = null;
+            logged_in = false;
+          }
+        }
+      }
       return {
-        user: sess ? sess.user : null,
-        logged_in: !!sess,
+        user,
+        logged_in,
         base: currentBase,
         strict_security: false,
         cli_relaxed: true,
@@ -77,8 +103,9 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
         body: { username: args.username, password: args.password },
       });
       const normalized = normalizeAccount(res, currentBase);
-      if (res?.token) {
-        activeSessions.set(res.token, { user: normalized.user, token: res.token });
+      const tok = normalized.token || res?.token;
+      if (tok) {
+        activeSessions.set(tok, { user: normalized.user, token: tok });
       }
       return normalized;
     }
@@ -95,8 +122,9 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
         },
       });
       const normalized = normalizeAccount(res, currentBase);
-      if (res?.token) {
-        activeSessions.set(res.token, { user: normalized.user, token: res.token });
+      const tok = normalized.token || res?.token;
+      if (tok) {
+        activeSessions.set(tok, { user: normalized.user, token: tok });
       }
       return normalized;
     }

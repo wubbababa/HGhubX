@@ -126,7 +126,7 @@ export default function VipModal() {
           username: user.username,
           days: selectedPlan.days,
           amount: selectedPlan.price,
-          subject: `HGhubX ${selectedPlan.name}`,
+          subject: `黄果 ${selectedPlan.name}`,
         }),
       });
 
@@ -170,7 +170,7 @@ export default function VipModal() {
         </div>
         <div className="flex-1 min-w-0">
           <h4 className="text-[16px] font-bold text-white flex items-center gap-2">
-            {checkIsVip(user) ? "尊贵的 HGhubX VIP 会员" : "开通 HGhubX VIP"}
+            {checkIsVip(user) ? "尊贵的 黄果 VIP 会员" : "开通 黄果 VIP"}
           </h4>
           <p className="text-[12px] text-zinc-300 mt-0.5">
             {checkIsVip(user) ? "您的 VIP 权益已生效 · 畅享全部高清短剧无限制播放" : "解锁全部视频完整观看权益 · 高清无限制"}

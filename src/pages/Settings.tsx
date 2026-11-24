@@ -123,7 +123,7 @@ export default function Settings({ onBack, initialSection }: { onBack: () => voi
         <div ref={contentRef} className="ios-settings-column ios-settings-content">
           <div className="pt-1 pb-4">
             <h1 className="ios-page-title text-on">设置</h1>
-            <p className="text-[13px] text-mut mt-2">让 HGhubX 更合你的习惯</p>
+            <p className="text-[13px] text-mut mt-2">让 黄果 更合你的习惯</p>
           </div>
           {section("外观", <>
             <div className="ios-appearance-row items-center">
@@ -303,14 +303,14 @@ export default function Settings({ onBack, initialSection }: { onBack: () => voi
             <Button onClick={() => setAbout(true)} className="w-full flex items-center gap-3 px-3.5 py-3 text-left pressable">
               <span className="ios-setting-icon"><IInfo size={16} /></span>
               <div className="flex-1">
-                <div className="text-[14px] text-on">关于 HGhubX</div>
+                <div className="text-[14px] text-on">关于 黄果</div>
                 <div className="text-[12px] text-mut">版本 {APP_VERSION} · 仅限非商业使用</div>
               </div>
               <IChevR size={15} className="text-mut" />
             </Button>
           </>)}
 
-          {isTauriApp && <div className="text-center text-[12px] text-dim mt-5">HGhubX {APP_VERSION} · {platform === "android" ? "Android" : platform === "ios" ? "iOS" : platform === "macos" ? "macOS" : platform === "linux" ? "Linux" : "Windows"} 客户端</div>}
+          {isTauriApp && <div className="text-center text-[12px] text-dim mt-5">黄果 {APP_VERSION} · {platform === "android" ? "Android" : platform === "ios" ? "iOS" : platform === "macos" ? "macOS" : platform === "linux" ? "Linux" : "Windows"} 客户端</div>}
         </div>
       </div>
 
@@ -335,13 +335,13 @@ export default function Settings({ onBack, initialSection }: { onBack: () => voi
         </div>
       </Modal>
 
-      <Modal label="关于 HGhubX" open={about} onClose={() => setAbout(false)} width={392}>
+      <Modal label="关于 黄果" open={about} onClose={() => setAbout(false)} width={392}>
         <div className="p-5">
           <div className="flex items-center gap-3">
             <span className="w-11 h-11 rounded-(--r-sm) brand-grad glow-neon flex items-center justify-center text-on-primary text-[17px] font-black">H</span>
             <div>
-              <div className="text-[16px] font-bold text-on leading-tight">HGhubX</div>
-              <div className="text-[12px] text-mut mt-0.5">HGhubX 客户端 v{APP_VERSION}</div>
+              <div className="text-[16px] font-bold text-on leading-tight">黄果</div>
+              <div className="text-[12px] text-mut mt-0.5">黄果 客户端 v{APP_VERSION}</div>
             </div>
           </div>
 
