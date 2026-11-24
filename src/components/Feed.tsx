@@ -27,7 +27,7 @@ import {
   IBack, IBoltF, IChevR, IChevronDown, IChevronUp, IClose, ICommentF, ICompress, ICrown, IExpand, IFileText, IHeart, IHeartF, IMore,
   ILink, IList, ILockF, IPauseF, IPlayF, ISearch, IStar, IStarF, IVertSwap, IVol, IVolMute,
 } from "../icons";
-import { clampSeekTime, shouldEnforceVipTrial, VIP_TRIAL_LIMIT_SECONDS } from "../vip";
+import { clampSeekTime, shouldEnforceVipTrial, syncVipStatusFromRemote, VIP_TRIAL_LIMIT_SECONDS } from "../vip";
 
 type Props = {
   videoIds: number[];
@@ -142,6 +142,14 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const [panel, setPanel] = useState<"episodes" | "comments" | "article" | "detail" | null>(null);
   const [showVipPrompt, setShowVipPrompt] = useState(false);
   const isTrialRestricted = shouldEnforceVipTrial(store.user);
+
+  // VIP 会员权益生效时自动解除试看拦截并继续播放
+  useEffect(() => {
+    if (!isTrialRestricted && showVipPrompt) {
+      setShowVipPrompt(false);
+      videoRef.current?.play();
+    }
+  }, [isTrialRestricted, showVipPrompt]);
   /* 续播：拿到时长后再 seek 一次（只对进入时那一条生效） */
   const resumeRef = useRef<{ key: string; t: number } | null>(
     startTime && startTime > 1 ? { key: `${videoIds[startIndex]}:${startEp || 1}`, t: startTime } : null,
@@ -1736,7 +1744,22 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                 <ICrown size={18} strokeWidth={2.4} />
                 开通 VIP 会员
               </Button>
-              {!store.user && (
+              {store.user ? (
+                <Button
+                  onClick={async () => {
+                    const isVip = await syncVipStatusFromRemote(store.user);
+                    if (isVip) {
+                      store.toast("VIP 状态已更新，欢迎观看完整视频！", "info");
+                      setShowVipPrompt(false);
+                      videoRef.current?.play();
+                    } else {
+                      store.toast("未检测到有效 VIP，若刚完成支付请稍候重试", "info");
+                    }
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-semibold text-[13px] pressable">
+                  已完成支付？刷新会员权益
+                </Button>
+              ) : (
                 <Button
                   onClick={() => {
                     store.setLoginOpen(true);

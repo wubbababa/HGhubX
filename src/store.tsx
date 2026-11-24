@@ -4,6 +4,7 @@ import { isStrictSecurity, setStrictSecurity as setHtmlStrictSecurity } from "./
 import type { User } from "./types";
 import { readStorage, STORAGE_KEYS } from "./storage";
 import { pickGuestData, useAccountData, type GuestData } from "./accountData";
+import { checkIsVip, syncVipStatusFromRemote } from "./vip";
 
 export type Platform = "android" | "ios" | "windows" | "macos" | "linux";
 export type Theme = "dark" | "light";
@@ -283,6 +284,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("hg:proxy-changed", changed);
     };
   }, []);
+
+  // 监听并校准用户的 VIP 会员状态
+  useEffect(() => {
+    if (!user || !user.username) return;
+    let active = true;
+    if (checkIsVip(user) && (user.user_type || "").toLowerCase() !== "vip") {
+      setUser({ ...user, user_type: "vip" });
+    }
+    syncVipStatusFromRemote(user).then((isVip) => {
+      if (!active) return;
+      if (isVip && (user.user_type || "").toLowerCase() !== "vip") {
+        setUser({ ...user, user_type: "vip" });
+      }
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [user?.id, user?.username]);
+
+  // 监听全局 VIP 状态变更事件
+  useEffect(() => {
+    const handleVipChange = (e: Event) => {
+      const detail = (e as CustomEvent<{ username: string; is_vip: boolean }>).detail;
+      if (detail && user && user.username === detail.username) {
+        if (detail.is_vip && (user.user_type || "").toLowerCase() !== "vip") {
+          setUser({ ...user, user_type: "vip" });
+        }
+      }
+    };
+    window.addEventListener("hg:vip-changed", handleVipChange);
+    return () => window.removeEventListener("hg:vip-changed", handleVipChange);
+  }, [user]);
 
   const setStrictSecurity = useCallback(async (on: boolean) => {
     if (!strictSecurityReady) throw new Error("安全设置尚未读取，请重新启动应用");

@@ -5,6 +5,7 @@ import { Modal, Sheet } from "./ui";
 import { Button } from "./ios/controls";
 import { Loader } from "./ios/effects";
 import { ICheck, IClose, ICrown } from "../icons";
+import { checkIsVip, syncVipStatusFromRemote } from "../vip";
 
 /** 套餐类型 */
 type VipPlan = {
@@ -46,9 +47,12 @@ export default function VipModal() {
   const [selectedPlan, setSelectedPlan] = useState<VipPlan>(FALLBACK_PLANS[0]);
   const [loading, setLoading] = useState(false);
 
-  // 弹窗打开时拉取远程支付配置
+  // 弹窗打开时拉取远程支付配置并同步当前用户 VIP 状态
   useEffect(() => {
     if (!vipOpen) return;
+    if (user) {
+      void syncVipStatusFromRemote(user);
+    }
     // 每次打开都刷新，保证配置实时
     let cancelled = false;
     setConfigLoading(true);
@@ -166,9 +170,11 @@ export default function VipModal() {
         </div>
         <div className="flex-1 min-w-0">
           <h4 className="text-[16px] font-bold text-white flex items-center gap-2">
-            开通 HGhubX VIP
+            {checkIsVip(user) ? "尊贵的 HGhubX VIP 会员" : "开通 HGhubX VIP"}
           </h4>
-          <p className="text-[12px] text-zinc-300 mt-0.5">解锁全部视频完整观看权益 · 高清无限制</p>
+          <p className="text-[12px] text-zinc-300 mt-0.5">
+            {checkIsVip(user) ? "您的 VIP 权益已生效 · 畅享全部高清短剧无限制播放" : "解锁全部视频完整观看权益 · 高清无限制"}
+          </p>
         </div>
       </div>
 
@@ -236,12 +242,26 @@ export default function VipModal() {
           {/* 底部按钮 */}
           <div className="flex flex-col gap-2 pt-1">
             {user ? (
-              <Button
-                onClick={handlePay}
-                disabled={loading || configLoading}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold text-[15px] flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 pressable">
-                {loading ? <Loader label="正在创建订单..." /> : `立即支付 ¥${selectedPlan.price} 开通`}
-              </Button>
+              <>
+                <Button
+                  onClick={handlePay}
+                  disabled={loading || configLoading}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold text-[15px] flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 pressable">
+                  {loading ? <Loader label="正在创建订单..." /> : `${checkIsVip(user) ? "续费" : "立即支付"} ¥${selectedPlan.price} ${checkIsVip(user) ? "时长" : "开通"}`}
+                </Button>
+                <Button
+                  onClick={async () => {
+                    const isVip = await syncVipStatusFromRemote(user);
+                    if (isVip) {
+                      toast("VIP 会员状态已同步生效！", "info");
+                    } else {
+                      toast("未检测到有效 VIP，若刚完成支付请稍候重试", "info");
+                    }
+                  }}
+                  className="w-full py-2 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-300 text-[12px] pressable">
+                  已完成支付？刷新 VIP 状态
+                </Button>
+              </>
             ) : (
               <Button
                 onClick={() => {

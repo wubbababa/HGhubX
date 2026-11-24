@@ -16,7 +16,7 @@ import { useInlinePlayerFullscreen } from "../useInlinePlayerFullscreen";
 import "../styles/post-player.css";
 import { ICompress, IExpand, ILockF, IPauseF, IPlayF, IVol, IVolMute, ICrown } from "../icons";
 import { useStore } from "../store";
-import { shouldEnforceVipTrial, VIP_TRIAL_LIMIT_SECONDS, clampSeekTime } from "../vip";
+import { shouldEnforceVipTrial, VIP_TRIAL_LIMIT_SECONDS, clampSeekTime, syncVipStatusFromRemote } from "../vip";
 
 type Props = {
   src: string;              // 原始 m3u8 地址
@@ -56,6 +56,13 @@ export default function Player({
   const { user, setLoginOpen, setVipOpen } = useStore();
   const isTrialRestricted = shouldEnforceVipTrial(user);
   const [showVipPrompt, setShowVipPrompt] = useState(false);
+
+  useEffect(() => {
+    if (!isTrialRestricted && showVipPrompt) {
+      setShowVipPrompt(false);
+      activity.play("vip_unlocked");
+    }
+  }, [isTrialRestricted, showVipPrompt]);
   const seek = useSeekInput({
     time,
     duration,
@@ -316,7 +323,19 @@ export default function Player({
                 <ICrown size={18} strokeWidth={2.4} />
                 开通 VIP 会员
               </Button>
-              {!user && (
+              {user ? (
+                <Button
+                  onClick={async () => {
+                    const isVip = await syncVipStatusFromRemote(user);
+                    if (isVip) {
+                      setShowVipPrompt(false);
+                      activity.play("vip_unlocked");
+                    }
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-semibold text-[13px] pressable">
+                  已完成支付？刷新会员权益
+                </Button>
+              ) : (
                 <Button
                   onClick={() => {
                     setLoginOpen(true);
