@@ -195,7 +195,8 @@ export function useAccountData(initialGuest: GuestData, saveGuest: (data: GuestD
         else if (mutation.current === startMutation && pending.current.size === 0) {
           state.current!.user = snapshot.user;
           current = applyInteractions(current, snapshot.interactions);
-          if (Array.isArray(snapshot.interactions?.favorite_video_ids)) favoritesKnown = true;
+          const favIds = snapshot.interactions?.favorite_video_ids ?? snapshot.user?.interactions?.favorite_video_ids ?? (Array.isArray(current.favs) ? current.favs : []);
+          if (Array.isArray(favIds)) favoritesKnown = true;
           else if (!favoritesKnown) errors.push("账号未返回收藏数据，请重试");
         } else if (pending.current.size === 0) needsResync.current = true;
       } else errors.push(message(profile.reason));

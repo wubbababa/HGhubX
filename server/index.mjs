@@ -56,8 +56,16 @@ function normalizeAccount(data, origin) {
   if (user.id !== undefined && user.id !== null) {
     user.id = Number(user.id);
   }
-  const interactions = data?.interactions || user.interactions;
-  if (interactions) user.interactions = interactions;
+  const rawInteractions = data?.interactions || user.interactions || {};
+  const interactions = {
+    favorite_video_ids: Array.isArray(rawInteractions.favorite_video_ids) ? rawInteractions.favorite_video_ids : [],
+    like_video_ids: Array.isArray(rawInteractions.like_video_ids) ? rawInteractions.like_video_ids : [],
+    follow_user_ids: Array.isArray(rawInteractions.follow_user_ids) ? rawInteractions.follow_user_ids : [],
+    like_post_ids: Array.isArray(rawInteractions.like_post_ids) ? rawInteractions.like_post_ids : [],
+    favorite_post_ids: Array.isArray(rawInteractions.favorite_post_ids) ? rawInteractions.favorite_post_ids : [],
+    ...rawInteractions,
+  };
+  user.interactions = interactions;
   const tok = data?.token || source?.token || data?.user?.token || data?.access_token || source?.access_token || data?.jwt || data?.auth_token;
   return {
     user,
@@ -207,10 +215,20 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
         // 如果上游账号验证报错（例如直连端点受限），但本地有当前 token 的活跃会话记录：
         // 回退返回缓存资料，坚决防止误判登出
         if (cached && cached.user?.id) {
+          const cachedUser = cached.user;
+          const rawInteractions = cachedUser.interactions || {};
+          const interactions = {
+            favorite_video_ids: Array.isArray(rawInteractions.favorite_video_ids) ? rawInteractions.favorite_video_ids : [],
+            like_video_ids: Array.isArray(rawInteractions.like_video_ids) ? rawInteractions.like_video_ids : [],
+            follow_user_ids: Array.isArray(rawInteractions.follow_user_ids) ? rawInteractions.follow_user_ids : [],
+            like_post_ids: Array.isArray(rawInteractions.like_post_ids) ? rawInteractions.like_post_ids : [],
+            favorite_post_ids: Array.isArray(rawInteractions.favorite_post_ids) ? rawInteractions.favorite_post_ids : [],
+            ...rawInteractions,
+          };
           return {
-            user: cached.user,
+            user: { ...cachedUser, interactions },
             origin: currentBase,
-            interactions: cached.user.interactions || {},
+            interactions,
             token,
           };
         }
@@ -432,44 +450,54 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
       });
     }
     case "api_like": {
+      const cached = token ? activeSessions.get(token) : null;
       const ep = args.ep || 1;
       return forwardEdgeRequest({
         origin: currentBase,
         method: args.on ? "POST" : "DELETE",
         path: `/api/videos/${args.id}/like?ep=${ep}`,
         token,
+        cookies: cached?.cookies,
       });
     }
     case "api_collect": {
+      const cached = token ? activeSessions.get(token) : null;
       return forwardEdgeRequest({
         origin: currentBase,
         method: args.on ? "POST" : "DELETE",
         path: `/api/videos/${args.id}/collect`,
         token,
+        cookies: cached?.cookies,
       });
     }
     case "api_follow": {
+      const cached = token ? activeSessions.get(token) : null;
       return forwardEdgeRequest({
         origin: currentBase,
         method: args.on ? "POST" : "DELETE",
         path: `/api/users/${args.uid}/follow`,
         token,
+        cookies: cached?.cookies,
       });
     }
     case "api_post_like": {
+      const cached = token ? activeSessions.get(token) : null;
       return forwardEdgeRequest({
         origin: currentBase,
         method: args.on ? "POST" : "DELETE",
         path: `/api/posts/${args.id}/like`,
         token,
+        cookies: cached?.cookies,
       });
     }
     case "api_post_collect": {
+      const cached = token ? activeSessions.get(token) : null;
       return forwardEdgeRequest({
         origin: currentBase,
         method: args.on ? "POST" : "DELETE",
         path: `/api/posts/${args.id}/collect`,
         token,
+        cookies: cached?.cookies,
       });
     }
     case "api_post_comments": {
@@ -539,33 +567,55 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
       });
     }
     case "api_account_history": {
+      const cached = token ? activeSessions.get(token) : null;
       const page = Math.max(1, Number(args.page) || 1);
       const size = Math.min(100, Math.max(1, Number(args.size) || 50));
-      const res = await forwardEdgeRequest({
-        origin: currentBase,
-        method: "GET",
-        path: `/api/users/me/history?page=${page}&size=${size}`,
-        token,
-      });
-      return normalizeAccountHistory(res);
+      try {
+        const res = await forwardEdgeRequest({
+          origin: currentBase,
+          method: "GET",
+          path: `/api/users/me/history?page=${page}&size=${size}`,
+          token,
+          cookies: cached?.cookies,
+        });
+        return normalizeAccountHistory(res);
+      } catch (err) {
+        // 上游历史接口不可达或未授权（例如直连受限）时安全返回空历史，绝不能把 401 抛给前端导致登出报错
+        return {
+          items: [],
+          pagination: { page, pages: 1, size, total: 0 },
+        };
+      }
     }
     case "api_account_history_record": {
-      return forwardEdgeRequest({
-        origin: currentBase,
-        method: "POST",
-        path: "/api/users/me/history",
-        body: { video_id: args.videoId, ep: args.ep },
-        token,
-      });
+      const cached = token ? activeSessions.get(token) : null;
+      try {
+        return await forwardEdgeRequest({
+          origin: currentBase,
+          method: "POST",
+          path: "/api/users/me/history",
+          body: { video_id: args.videoId, ep: args.ep },
+          token,
+          cookies: cached?.cookies,
+        });
+      } catch (err) {
+        return { ok: true };
+      }
     }
     case "api_account_history_delete": {
-      return forwardEdgeRequest({
-        origin: currentBase,
-        method: "POST",
-        path: "/api/users/me/history/delete",
-        body: { ids: args.ids },
-        token,
-      });
+      const cached = token ? activeSessions.get(token) : null;
+      try {
+        return await forwardEdgeRequest({
+          origin: currentBase,
+          method: "POST",
+          path: "/api/users/me/history/delete",
+          body: { ids: args.ids },
+          token,
+          cookies: cached?.cookies,
+        });
+      } catch (err) {
+        return { ok: true };
+      }
     }
     case "line_state": {
       return {

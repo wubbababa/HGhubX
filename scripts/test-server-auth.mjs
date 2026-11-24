@@ -54,7 +54,14 @@ try {
   const meResult = await executeCommand("api_me", {}, `Bearer ${testToken}`);
   assert.equal(meResult.user.id, testUser.id);
   assert.equal(meResult.user.username, testUser.username);
-  console.log("PASS: 2. api_me 在上游 401 时成功通过会话缓存托底返回用户资料，防止登录态闪退");
+  assert.equal(Array.isArray(meResult.interactions?.favorite_video_ids), true, "interactions.favorite_video_ids 必须始终为有效数组");
+  console.log("PASS: 2. api_me 在上游 401 时成功通过会话缓存托底返回用户资料与收藏结构");
+
+  // 3.1 执行 api_account_history：上游 401 时必须平滑返回空列表，绝不能向客户端抛出 401 导致同步报过期
+  const historyResult = await executeCommand("api_account_history", {}, `Bearer ${testToken}`);
+  assert.equal(Array.isArray(historyResult.items), true);
+  assert.equal(historyResult.pagination.page, 1);
+  console.log("PASS: 2.1 api_account_history 在上游不可达/401 时安全返回结构化空历史");
 
   // 4. 执行 app_boot：必须正确恢复会话
   const bootResult = await executeCommand("app_boot", {}, `Bearer ${testToken}`);
