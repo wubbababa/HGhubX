@@ -112,7 +112,7 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
             if (normalized?.user?.id) {
               user = normalized.user;
               logged_in = true;
-              activeSessions.set(token, { user: normalized.user, token });
+              activeSessions.set(token, { user: normalized.user, token, cookies: res?._cookies || "" });
               saveSessionsToDisk();
             }
           } catch {
@@ -138,8 +138,9 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
       });
       const normalized = normalizeAccount(res, currentBase);
       const tok = normalized.token || res?.token;
+      const cookies = res?._cookies || "";
       if (tok && normalized.user?.id) {
-        activeSessions.set(tok, { user: normalized.user, token: tok });
+        activeSessions.set(tok, { user: normalized.user, token: tok, cookies });
         saveSessionsToDisk();
       }
       return normalized;
@@ -158,20 +159,23 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
       });
       const normalized = normalizeAccount(res, currentBase);
       const tok = normalized.token || res?.token;
+      const cookies = res?._cookies || "";
       if (tok && normalized.user?.id) {
-        activeSessions.set(tok, { user: normalized.user, token: tok });
+        activeSessions.set(tok, { user: normalized.user, token: tok, cookies });
         saveSessionsToDisk();
       }
       return normalized;
     }
     case "api_logout": {
       if (token) {
+        const cached = activeSessions.get(token);
         try {
           await forwardEdgeRequest({
             origin: currentBase,
             method: "POST",
             path: "/api/account/logout",
             token,
+            cookies: cached?.cookies,
           });
         } catch { /* 忽略上游退出错误 */ }
         activeSessions.delete(token);
@@ -180,18 +184,38 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
       return { ok: true };
     }
     case "api_me": {
-      const res = await forwardEdgeRequest({
-        origin: currentBase,
-        method: "GET",
-        path: "/api/account/me",
-        token,
-      });
-      const normalized = normalizeAccount(res, currentBase);
-      if (token && normalized.user?.id) {
-        activeSessions.set(token, { user: normalized.user, token });
-        saveSessionsToDisk();
+      const cached = token ? activeSessions.get(token) : null;
+      try {
+        const res = await forwardEdgeRequest({
+          origin: currentBase,
+          method: "GET",
+          path: "/api/account/me",
+          token,
+          cookies: cached?.cookies,
+        });
+        const normalized = normalizeAccount(res, currentBase);
+        if (token && normalized.user?.id) {
+          activeSessions.set(token, {
+            user: { ...(cached?.user || {}), ...normalized.user },
+            token,
+            cookies: res?._cookies || cached?.cookies || "",
+          });
+          saveSessionsToDisk();
+        }
+        return normalized;
+      } catch (err) {
+        // 如果上游账号验证报错（例如直连端点受限），但本地有当前 token 的活跃会话记录：
+        // 回退返回缓存资料，坚决防止误判登出
+        if (cached && cached.user?.id) {
+          return {
+            user: cached.user,
+            origin: currentBase,
+            interactions: cached.user.interactions || {},
+            token,
+          };
+        }
+        throw err;
       }
-      return normalized;
     }
     case "api_feed": {
       return forwardEdgeRequest({

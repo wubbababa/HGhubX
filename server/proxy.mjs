@@ -10,7 +10,7 @@ const plCache = new Map();
 /**
  * 向上游站点发起业务接口请求（兼容直连与信封代理）
  */
-export async function forwardEdgeRequest({ origin = DEFAULT_BASE, method = "GET", path, body, token }) {
+export async function forwardEdgeRequest({ origin = DEFAULT_BASE, method = "GET", path, body, token, cookies }) {
   const cur = origin.replace(/\/+$/, "");
   const targetUrl = path.startsWith("http") ? path : `${cur}${path.startsWith("/") ? "" : "/"}${path}`;
 
@@ -20,12 +20,22 @@ export async function forwardEdgeRequest({ origin = DEFAULT_BASE, method = "GET"
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   };
 
-  if (token) {
-    if (/[\r\n;]/.test(token)) throw new Error("登录令牌格式无效");
-    headers["Authorization"] = `Bearer ${token}`;
-    // Upstream account endpoints authenticate with the HttpOnly session cookie.
-    // The Web proxy does not share the upstream cookie jar, so mirror the token here.
-    headers["Cookie"] = `_USER_TOKEN_=${token}; _LOGIN_=1`;
+  if (token || cookies) {
+    if (token && /[\r\n;]/.test(token)) throw new Error("登录令牌格式无效");
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const cookieList = [];
+    if (cookies) {
+      cookieList.push(cookies);
+    }
+    if (token) {
+      if (!cookieList.some(c => c.includes("_USER_TOKEN_="))) {
+        cookieList.push(`_USER_TOKEN_=${token}`);
+      }
+      if (!cookieList.some(c => c.includes("_LOGIN_="))) {
+        cookieList.push("_LOGIN_=1");
+      }
+    }
+    headers["Cookie"] = cookieList.join("; ");
   }
 
   const httpMethod = (method || "GET").toUpperCase();
@@ -45,6 +55,14 @@ export async function forwardEdgeRequest({ origin = DEFAULT_BASE, method = "GET"
     throw new Error(`HTTP ${res.status}: ${text.slice(0, 160)}`);
   }
 
+  let rawCookies = "";
+  try {
+    const sc = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
+    if (Array.isArray(sc) && sc.length > 0) {
+      rawCookies = sc.map(c => c.split(';')[0].trim()).join('; ');
+    }
+  } catch { /* ignore */ }
+
   if (!text.trim()) {
     return null;
   }
@@ -52,24 +70,36 @@ export async function forwardEdgeRequest({ origin = DEFAULT_BASE, method = "GET"
   try {
     const json = JSON.parse(text);
     if (!json) return null;
+    let data = null;
     if (json.status === 1) {
       if (json.data && typeof json.data === "object" && !Array.isArray(json.data)) {
         if (json.token && !json.data.token) json.data.token = json.token;
         if (json.access_token && !json.data.access_token) json.data.access_token = json.access_token;
       }
-      return json.data !== undefined ? json.data : json;
-    }
-    if (json.status === undefined && json.data !== undefined) {
+      data = json.data !== undefined ? json.data : json;
+    } else if (json.status === undefined && json.data !== undefined) {
       if (json.data && typeof json.data === "object" && !Array.isArray(json.data)) {
         if (json.token && !json.data.token) json.data.token = json.token;
         if (json.access_token && !json.data.access_token) json.data.access_token = json.access_token;
       }
-      return json.data;
+      data = json.data;
+    } else if (json.status === undefined) {
+      data = json;
+    } else {
+      throw new Error(json.msg || "接口返回失败");
     }
-    if (json.status === undefined) {
-      return json;
+
+    if (data && typeof data === "object" && rawCookies) {
+      try {
+        Object.defineProperty(data, "_cookies", {
+          value: rawCookies,
+          enumerable: false,
+          writable: true,
+          configurable: true,
+        });
+      } catch { /* ignore */ }
     }
-    throw new Error(json.msg || "接口返回失败");
+    return data;
   } catch (err) {
     if (err.message && !err.message.includes("JSON")) {
       throw err;
