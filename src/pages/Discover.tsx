@@ -5,6 +5,7 @@ import { api, fmt } from "../api";
 import type { Post, TopicCard, TopicDetail, VideoCard } from "../types";
 import { useStore } from "../store";
 import { MAX_BLOCKED_TAGS, MAX_TAG_LENGTH, useContentPreferences } from "../contentPreferences";
+import { filterAllowedVideos, useVideoWhitelist } from "../whitelist";
 import { Masonry, MediaCard } from "../components/cards";
 import { FilteredContent } from "../components/FilteredContent";
 import { InplaceSearch } from "../components/InplaceSearch";
@@ -181,7 +182,9 @@ export function TopicPage({ slug, name, onBack, wide }: { slug: string; name: st
     return () => { sequence.current++; busy.current = false; };
   }, [load]);
 
-  const { topic, related, videos, page, pages, total, loading, loadingMore, error } = state;
+  const whitelist = useVideoWhitelist();
+  const { topic, related, videos: rawVideos, page, pages, total, loading, loadingMore, error } = state;
+  const videos = whitelist.active ? filterAllowedVideos(rawVideos) : rawVideos;
   const hasMore = page < pages;
 
   return (
@@ -301,6 +304,7 @@ export function TagsPage({ onBack, wide }: { onBack: () => void; wide: boolean }
 /* ================= 标签视频页 ================= */
 export function TagPage({ tag, name, onBack, wide }: { tag: string; name: string; onBack: () => void; wide: boolean }) {
   const { push } = useStore();
+  const whitelist = useVideoWhitelist();
   const { preferences, storageError, isTagBlocked, blockTags, unblockTag } = useContentPreferences();
   const filtering = !preferences.paused && (preferences.blockedTags.length > 0 || preferences.hideUntagged);
   const tagBlocked = isTagBlocked(name);
@@ -327,8 +331,8 @@ export function TagPage({ tag, name, onBack, wide }: { tag: string; name: string
   const scrollContainer = useRef<HTMLDivElement>(null);
   const currentVideos = loadedVideoTag === tag;
   const currentPosts = loadedPostTag === tag;
-  const visibleVideos = currentVideos ? videos : [];
-  const visiblePosts = currentPosts ? posts : [];
+  const visibleVideos = currentVideos ? (whitelist.active ? filterAllowedVideos(videos) : videos) : [];
+  const visiblePosts = !whitelist.active && currentPosts ? posts : [];
 
   const load = useCallback(async (kind: "video" | "post", next: number, reset = false) => {
     if (busy.current[kind] && !reset) return;
@@ -376,9 +380,10 @@ export function TagPage({ tag, name, onBack, wide }: { tag: string; name: string
     setVideoLoading(true); setPostLoading(true); setVideoErr(""); setPostErr(""); setSearching(false);
     if (scrollContainer.current) scrollContainer.current.scrollTop = 0;
     void load("video", 1, true);
-    void load("post", 1, true);
+    if (!whitelist.active) void load("post", 1, true);
+    else setPostLoading(false);
     return () => { sequence.current.video++; sequence.current.post++; busy.current.video = false; busy.current.post = false; };
-  }, [load, tag]);
+  }, [load, tag, whitelist.active]);
   useEffect(() => {
     const el = videoSentinel.current;
     if (!el || filtering || videoErr || videoLoading || videoPage >= videoPages) return;
@@ -405,7 +410,7 @@ export function TagPage({ tag, name, onBack, wide }: { tag: string; name: string
           <Button aria-label="返回" onClick={onBack} className="w-10 h-10 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><IBack size={20} /></Button>
           <div className="flex-1 min-w-0">
             <h1 className="text-[16px] font-bold text-on truncate" title={name}>{name}</h1>
-            <div role="status" className="text-[12px] text-mut">短剧 {currentVideos ? videoTotal : 0} · 吃瓜 {currentPosts ? postTotal : 0}</div>
+            <div role="status" className="text-[12px] text-mut">短剧 {currentVideos ? visibleVideos.length : 0}{!whitelist.active ? ` · 吃瓜 ${currentPosts ? postTotal : 0}` : ""}</div>
           </div>
           <Button onClick={() => setSearching(true)} aria-label="搜索短剧" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></Button>
         </div>
@@ -434,19 +439,19 @@ export function TagPage({ tag, name, onBack, wide }: { tag: string; name: string
         {videoLoading && visibleVideos.length > 0 && <div className="flex justify-center py-3"><Loader className="w-6 h-6 spinner" /></div>}
         {!videoLoading && !videoErr && videoPage < videoPages && <Button onClick={() => void load("video", videoPage + 1)} className="my-2 px-4 text-primary">加载更多短剧</Button>}
 
-        {postLoading && !visiblePosts.length && <div className="flex justify-center py-8"><Loader className="w-7 h-7 spinner" /></div>}
-        {postErr && !visiblePosts.length && <Empty icon={<TagIcon size={26} />} title="吃瓜帖子加载失败" sub={postErr} action="重试" onAction={() => void load("post", 1, true)} />}
-        {visiblePosts.length > 0 && <section className="mb-6">
+        {!whitelist.active && postLoading && !visiblePosts.length && <div className="flex justify-center py-8"><Loader className="w-7 h-7 spinner" /></div>}
+        {!whitelist.active && postErr && !visiblePosts.length && <Empty icon={<TagIcon size={26} />} title="吃瓜帖子加载失败" sub={postErr} action="重试" onAction={() => void load("post", 1, true)} />}
+        {!whitelist.active && visiblePosts.length > 0 && <section className="mb-6">
           <h2 className="mb-3 text-[14px] font-semibold text-on">吃瓜 <span className="text-[12px] font-normal text-mut">{postTotal}</span></h2>
           <FilteredContent items={visiblePosts} scopeKey={`tag-post:${tag}`}>{shownPosts => <div className={`ios-media-grid ${wide ? "is-wide" : ""}`}>
             {shownPosts.map(post => <MediaCard key={post.id} title={post.title} cover={post.cover} subtitle={post.tags?.slice(0, 2).join(" · ")} onOpen={() => push({ kind: "post", id: post.id })} />)}
           </div>}</FilteredContent>
         </section>}
-        <div ref={postSentinel} className="h-2" />
-        {postErr && visiblePosts.length > 0 && <div role="status" className="flex flex-wrap items-center justify-center gap-2 py-2 text-[12px] text-mut"><span>吃瓜加载失败：{postErr}</span><Button onClick={() => void load("post", postPage + 1)} className="px-3 text-primary">重试</Button></div>}
-        {postLoading && visiblePosts.length > 0 && <div className="flex justify-center py-3"><Loader className="w-6 h-6 spinner" /></div>}
-        {!postLoading && !postErr && postPage < postPages && <Button onClick={() => void load("post", postPage + 1)} className="my-2 px-4 text-primary">加载更多吃瓜</Button>}
-        {!videoLoading && !postLoading && !videoErr && !postErr && !visibleVideos.length && !visiblePosts.length && <Empty icon={<TagIcon size={26} />} title="该标签下暂无内容" />}
+        {!whitelist.active && <div ref={postSentinel} className="h-2" />}
+        {!whitelist.active && postErr && visiblePosts.length > 0 && <div role="status" className="flex flex-wrap items-center justify-center gap-2 py-2 text-[12px] text-mut"><span>吃瓜加载失败：{postErr}</span><Button onClick={() => void load("post", postPage + 1)} className="px-3 text-primary">重试</Button></div>}
+        {!whitelist.active && postLoading && visiblePosts.length > 0 && <div className="flex justify-center py-3"><Loader className="w-6 h-6 spinner" /></div>}
+        {!whitelist.active && !postLoading && !postErr && postPage < postPages && <Button onClick={() => void load("post", postPage + 1)} className="my-2 px-4 text-primary">加载更多吃瓜</Button>}
+        {!videoLoading && (whitelist.active || !postLoading) && !videoErr && (whitelist.active || !postErr) && !visibleVideos.length && !visiblePosts.length && <Empty icon={<TagIcon size={26} />} title="该标签下暂无内容" />}
       </div>
       {searching && <InplaceSearch kind="video" wide={wide} onClose={() => setSearching(false)} onOpenVideo={(v, list) => push({ kind: "feed", videoIds: list.map(x => x.id), index: list.findIndex(x => x.id === v.id), title: name })} />}
     </div>

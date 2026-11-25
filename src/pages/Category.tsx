@@ -7,6 +7,7 @@ import { useStore } from "../store";
 import { MediaCard, Masonry, RowCard } from "../components/cards";
 import { FilteredContent } from "../components/FilteredContent";
 import { useContentPreferences } from "../contentPreferences";
+import { filterAllowedVideos, useVideoWhitelist } from "../whitelist";
 import { CollectionLink, CollectionLinks } from "../components/CollectionLink";
 import { InplaceSearch } from "../components/InplaceSearch";
 import { Empty } from "../components/ui";
@@ -21,6 +22,7 @@ export const CHANNELS = [
 /* ================= 分类总览 ================= */
 export default function Category({ wide, active }: { wide: boolean; active: boolean }) {
   const { push, lineEpoch } = useStore();
+  const whitelist = useVideoWhitelist();
   const [rows, setRows] = useState<Record<string, VideoCard[]>>({});
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
@@ -73,8 +75,8 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
     if (!active || started.current) return;
     started.current = true;
     CHANNELS.forEach(c => { void loadPreview(c.cate); });
-    void loadPreview("posts");
-  }, [active, loadPreview]);
+    if (!whitelist.active) void loadPreview("posts");
+  }, [active, loadPreview, whitelist.active]);
 
   /* 线路切换后：已打开过的分类里，加载失败的栏目在新线路上重试一次 */
   useEffect(() => {
@@ -87,7 +89,7 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
       <div className="ios-page-heading shrink-0 px-4">
         <div className="flex items-end gap-2.5">
           <h1 className="ios-page-title text-on">分类</h1>
-          <span className="text-[12px] text-mut pb-0.5">{CHANNELS.length + 1} 个频道 · 每周持续上新</span>
+          <span className="text-[12px] text-mut pb-0.5">{whitelist.active ? CHANNELS.length : CHANNELS.length + 1} 个频道 · 每周持续上新</span>
         </div>
       </div>
 
@@ -108,7 +110,7 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
 
         <p className="mb-3 text-[12px] text-mut">频道卡片可左右滑动浏览 · 点击“全部”查看完整频道</p>
         {CHANNELS.map((c, ci) => {
-          const list = rows[c.cate] || [];
+          const list = filterAllowedVideos(rows[c.cate] || []);
           return (
             <section key={c.cate} aria-label={c.name} className="mb-5 a-rise" style={{ animationDelay: `${Math.min(ci * 50, 300)}ms` }}>
               <Button onClick={() => push({ kind: "channel", cate: c.cate, name: c.name })}
@@ -134,8 +136,8 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
           );
         })}
 
-        {/* 吃瓜 */}
-        <section aria-label="吃瓜" className="mb-5 a-rise">
+        {/* 吃瓜（白名单模式下隐藏非视频 ID 模块） */}
+        {!whitelist.active && <section aria-label="吃瓜" className="mb-5 a-rise">
           <Button onClick={() => push({ kind: "posts" })}
             className="w-full flex items-center gap-2.5 mb-2.5 text-left pressable group">
             <span className="w-[36px] h-[36px] rounded-(--r-sm) tonal flex items-center justify-center shrink-0 text-primary">
@@ -156,7 +158,7 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
             ))}
             {!posts.length && <PreviewStatus name="吃瓜" loading={loading.posts !== false} error={errors.posts} onRetry={() => void loadPreview("posts")} />}
           </div>}</FilteredContent>
-        </section>
+        </section>}
 
         <div className="text-center text-[12px] text-dim pt-1">— 已展示全部频道 —</div>
       </div>
@@ -196,7 +198,8 @@ export function ChannelPage({ cate, name, onBack, wide }: { cate: string; name: 
   const [serverSort, setServerSort] = useState<(typeof CHANNEL_SORTS)[number]["value"]>("latest");
   const [originalCate, setOriginalCate] = useState<(typeof ORIGINAL_CATES)[number]["value"]>("all");
   const [pageItems, setPageItems] = useState<VideoCard[][]>([]);
-  const items = pageItems.flat();
+  const whitelist = useVideoWhitelist();
+  const items = whitelist.active ? filterAllowedVideos(pageItems.flat()) : pageItems.flat();
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(true);

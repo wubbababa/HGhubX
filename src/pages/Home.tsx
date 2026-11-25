@@ -9,6 +9,7 @@ import { Empty } from "../components/ui";
 import { Button } from "../components/ios/controls";
 import { useContentPreferences } from "../contentPreferences";
 import { PreferenceStorageNotice } from "../components/PreferenceStorageNotice";
+import { useVideoWhitelist } from "../whitelist";
 
 /* Fisher-Yates 洗牌：首页第一页随机打乱，避免每次进来都停在同一个 top1 */
 function shuffle<T>(arr: T[]): T[] {
@@ -22,6 +23,7 @@ function shuffle<T>(arr: T[]): T[] {
 
 export default function Home({ active, bottomInset }: { active: boolean; bottomInset: number }) {
   const { toast, lineEpoch, push } = useStore();
+  const whitelist = useVideoWhitelist();
   const { preferences, revision, blockReason, storageError } = useContentPreferences();
   const filtering = !preferences.paused && (preferences.blockedTags.length > 0 || preferences.hideUntagged);
   const [excluded, setExcluded] = useState<{ revision: number; epoch: number; ids: number[] }>({ revision, epoch: lineEpoch, ids: [] });
@@ -48,6 +50,7 @@ export default function Home({ active, bottomInset }: { active: boolean; bottomI
   itemsRef.current = items;
 
   const load = useCallback(async (p: number): Promise<void> => {
+    if (whitelist.active) { setDone(true); return; }
     if (!activeRef.current || loadingRef.current || (done && p > 1)) return;
     const requestEpoch = lineEpochRef.current;
     if (p === 1) attemptedEpoch.current = requestEpoch;
@@ -96,15 +99,19 @@ export default function Home({ active, bottomInset }: { active: boolean; bottomI
   /* A never-visited/hidden home does no new work. New-line retries resume on return.
      Loaded pages and an already mounted player remain intact across navigation. */
   useEffect(() => {
+    if (whitelist.active) return;
     if (!active || items.length || loadingRef.current || attemptedEpoch.current === lineEpoch) return;
     void load(1);
-  }, [active, lineEpoch, items.length, load]);
-  useEffect(() => { if (active && items.length) setFeedMounted(true); }, [active, items.length]);
+  }, [whitelist.active, active, lineEpoch, items.length, load]);
+  useEffect(() => { if (active && (items.length || (whitelist.active && whitelist.ids.length))) setFeedMounted(true); }, [active, items.length, whitelist.active, whitelist.ids.length]);
 
   const ids = useMemo(() => {
     const blocked = new Set(excluded.revision === revision && excluded.epoch === lineEpoch ? excluded.ids : []);
+    if (whitelist.active) {
+      return whitelist.ids.filter(id => !blocked.has(id));
+    }
     return items.filter(item => !blocked.has(item.id) && !blockReason(item.tags)).map(item => item.id);
-  }, [items, excluded, revision, lineEpoch, blockReason]);
+  }, [whitelist.active, whitelist.ids, items, excluded, revision, lineEpoch, blockReason]);
   const onBlocked = useCallback((id: number) => setExcluded(previous => {
     const ids = previous.revision === revision && previous.epoch === lineEpoch ? previous.ids : [];
     return ids.includes(id) ? previous : { revision, epoch: lineEpoch, ids: [...ids, id] };

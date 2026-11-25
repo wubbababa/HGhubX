@@ -773,6 +773,77 @@ export function renderAdminHtml() {
       </div>
     </div>
 
+    <!-- Web 端视频 ID 白名单管理面板 -->
+    <div class="card pay-section" style="margin-bottom: 2rem;">
+      <div class="section-title">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+        </svg>
+        Web 端视频 ID 白名单
+        <span id="whitelistConfigStatus" class="config-status saved" style="display: none;">● 已保存</span>
+      </div>
+
+      <div class="pay-toggle">
+        <div id="whitelistEnabledToggle" class="toggle-switch" onclick="toggleWhitelistEnabled()"></div>
+        <span style="font-size: 0.9rem;">仅允许白名单视频（Web 端生效）</span>
+        <span id="whitelistEnabledLabel" style="font-size: 0.8rem; color: var(--text-muted);">未启用</span>
+      </div>
+
+      <div class="form-group">
+        <label for="whitelistBatchInput">批量添加视频 ID 或播放链接（支持换行、逗号、空格分隔）</label>
+        <div style="display: flex; gap: 0.75rem; align-items: flex-start; flex-wrap: wrap;">
+          <textarea id="whitelistBatchInput" rows="3" placeholder="例如：16105 或 https://huangguoai.com/video/16105/" style="flex: 1; min-width: 260px; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); color: var(--text); padding: 0.65rem 0.85rem; border-radius: 8px; font-size: 0.875rem; outline: none; resize: vertical;"></textarea>
+          <button type="button" class="btn btn-secondary" onclick="appendWhitelistFromInput()">+ 解析并加入列表</button>
+        </div>
+        <div class="field-hint">开启白名单后，Web 端首页仅展示以下 ID 对应视频，社区帖子等非视频 ID 模块将自动隐藏。</div>
+      </div>
+
+      <div class="form-group">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <label style="margin-bottom: 0;">当前允许播放的 ID 列表（<span id="whitelistCount">0</span> 个）</label>
+          <button type="button" class="btn btn-danger" style="padding: 0.3rem 0.75rem; font-size: 0.75rem;" onclick="clearWhitelistIds()">清空列表</button>
+        </div>
+        <div id="whitelistTags" style="display: flex; flex-wrap: wrap; gap: 0.5rem; min-height: 44px; padding: 0.65rem; background: rgba(15, 23, 42, 0.45); border: 1px solid var(--border); border-radius: 8px;"></div>
+      </div>
+
+      <div class="pay-actions">
+        <button class="btn btn-primary" onclick="saveWhitelistConfig()" style="flex: 1;">
+          💾 保存白名单配置
+        </button>
+        <button class="btn btn-secondary" onclick="loadWhitelistConfig()">
+          🔄 重新加载
+        </button>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- 自动加载上游视频列表，方便打开核验后一键加入白名单 -->
+      <div class="form-group" style="margin-bottom: 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem;">
+          <label style="margin-bottom: 0; font-size: 0.95rem; font-weight: 600; color: #e2e8f0;">
+            网站视频挑选列表（自动加载 ID 与标题）
+          </label>
+          <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <input type="text" id="whitelistVideoSearch" placeholder="输入关键词、ID 或链接筛选" style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); color: var(--text); padding: 0.42rem 0.75rem; border-radius: 8px; font-size: 0.84rem; width: 210px; outline: none;" onkeydown="if(event.key==='Enter') loadUpstreamVideos(1)" />
+            <button type="button" class="btn btn-secondary" style="padding: 0.42rem 0.85rem; font-size: 0.82rem;" onclick="loadUpstreamVideos(1)">🔍 加载/搜索</button>
+            <button type="button" class="btn btn-secondary" style="padding: 0.42rem 0.85rem; font-size: 0.82rem;" onclick="document.getElementById('whitelistVideoSearch').value=''; loadUpstreamVideos(1)">重置</button>
+          </div>
+        </div>
+
+        <div id="whitelistVideoList" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 460px; overflow-y: auto; padding: 0.5rem; background: rgba(15, 23, 42, 0.45); border: 1px solid var(--border); border-radius: 8px;">
+          <span style="font-size: 0.84rem; color: var(--text-muted); padding: 0.5rem;">正在加载网站视频列表...</span>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem;">
+          <span id="whitelistVideoPageInfo" style="font-size: 0.82rem; color: var(--text-muted);">第 1 页</span>
+          <div style="display: flex; gap: 0.5rem;">
+            <button type="button" id="whitelistPrevPageBtn" class="btn btn-secondary" style="padding: 0.35rem 0.8rem; font-size: 0.8rem;" onclick="loadUpstreamVideos(whitelistVideoPage - 1)">上一页</button>
+            <button type="button" id="whitelistNextPageBtn" class="btn btn-secondary" style="padding: 0.35rem 0.8rem; font-size: 0.8rem;" onclick="loadUpstreamVideos(whitelistVideoPage + 1)">下一页</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 用户列表卡片 -->
     <div class="table-container">
       <div class="table-header-row">
@@ -822,6 +893,8 @@ export function renderAdminHtml() {
       const savedSecret = localStorage.getItem(STORAGE_KEY) || '';
       document.getElementById('secretKey').value = savedSecret;
       loadUsersList();
+      loadWhitelistConfig();
+      loadUpstreamVideos(1);
     });
 
     function saveSecret() {
@@ -829,6 +902,8 @@ export function renderAdminHtml() {
       localStorage.setItem(STORAGE_KEY, secret);
       showToast('管理密钥已保存到本地', 'success');
       loadUsersList();
+      loadWhitelistConfig();
+      loadUpstreamVideos(1);
     }
 
     function getSecret() {
@@ -1365,6 +1440,277 @@ export function renderAdminHtml() {
       } else {
         el.className = 'config-status unsaved';
         el.textContent = '● 未保存';
+      }
+    }
+
+    // ==================== Web 端视频白名单管理 ====================
+    let whitelistConfig = { enabled: false, ids: [] };
+
+    function parseWhitelistTokens(raw) {
+      if (!raw) return [];
+      const seen = new Set();
+      const result = [];
+      for (const token of String(raw).split(/[\\s,，;；]+/)) {
+        const trimmed = token.trim();
+        if (!trimmed) continue;
+        const m = trimmed.match(/\\/video\\/(\\d+)/i);
+        const numStr = m ? m[1] : (/^\\d+$/.test(trimmed) ? trimmed : '');
+        if (!numStr) continue;
+        const id = parseInt(numStr, 10);
+        if (id > 0 && !seen.has(id)) {
+          seen.add(id);
+          result.push(id);
+        }
+      }
+      return result;
+    }
+
+    function updateWhitelistConfigStatus(status) {
+      const el = document.getElementById('whitelistConfigStatus');
+      if (!el) return;
+      el.style.display = 'inline-flex';
+      if (status === 'saved') {
+        el.className = 'config-status saved';
+        el.textContent = '● 已保存';
+      } else {
+        el.className = 'config-status unsaved';
+        el.textContent = '● 未保存';
+      }
+    }
+
+    function renderWhitelistConfig() {
+      const toggle = document.getElementById('whitelistEnabledToggle');
+      const label = document.getElementById('whitelistEnabledLabel');
+      const countEl = document.getElementById('whitelistCount');
+      const tagsEl = document.getElementById('whitelistTags');
+      if (!toggle || !label || !countEl || !tagsEl) return;
+
+      if (whitelistConfig.enabled) {
+        toggle.classList.add('active');
+        label.textContent = '已启用（仅展示白名单视频）';
+        label.style.color = 'var(--success)';
+      } else {
+        toggle.classList.remove('active');
+        label.textContent = '未启用';
+        label.style.color = 'var(--text-muted)';
+      }
+
+      const ids = Array.isArray(whitelistConfig.ids) ? whitelistConfig.ids : [];
+      countEl.textContent = String(ids.length);
+      if (!ids.length) {
+        tagsEl.innerHTML = '<span style="font-size: 0.82rem; color: var(--text-muted);">暂无白名单 ID，请从上方输入框粘贴 ID 或视频链接。</span>';
+        return;
+      }
+      tagsEl.innerHTML = ids.map(id => {
+        const title = whitelistTitleMap[id] ? ' · ' + escapeHtml(whitelistTitleMap[id]) : '';
+        return \`<span style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.28rem 0.65rem;border-radius:9999px;background:rgba(99,102,241,0.18);border:1px solid rgba(99,102,241,0.35);font-size:0.82rem;color:#c7d2fe;max-width:100%;">
+          <a href="https://huangguoai.com/video/\${id}/" target="_blank" rel="noopener noreferrer" style="color:#c7d2fe;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px;" title="打开播放页">#\${id}\${title}</a>
+          <button type="button" onclick="removeWhitelistId(\${id})" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:0.9rem;line-height:1;" title="移除">×</button>
+        </span>\`;
+      }).join('');
+    }
+
+    let whitelistVideoPage = 1;
+    let whitelistVideoPages = 1;
+    let whitelistVideos = [];
+    const whitelistTitleMap = {};
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function renderUpstreamVideos() {
+      const listEl = document.getElementById('whitelistVideoList');
+      const pageInfoEl = document.getElementById('whitelistVideoPageInfo');
+      const prevBtn = document.getElementById('whitelistPrevPageBtn');
+      const nextBtn = document.getElementById('whitelistNextPageBtn');
+      if (!listEl) return;
+
+      if (pageInfoEl) {
+        pageInfoEl.textContent = \`第 \${whitelistVideoPage} / \${whitelistVideoPages} 页\`;
+      }
+      if (prevBtn) prevBtn.disabled = whitelistVideoPage <= 1;
+      if (nextBtn) nextBtn.disabled = whitelistVideoPage >= whitelistVideoPages;
+
+      if (!whitelistVideos.length) {
+        listEl.innerHTML = '<span style="font-size: 0.84rem; color: var(--text-muted); padding: 0.5rem;">未加载到匹配的视频。</span>';
+        return;
+      }
+
+      const activeSet = new Set(whitelistConfig.ids || []);
+      listEl.innerHTML = whitelistVideos.map(item => {
+        const added = activeSet.has(item.id);
+        const tagsHtml = (item.tags || []).slice(0, 3).map(t =>
+          \`<span style="font-size:0.72rem;padding:0.12rem 0.45rem;border-radius:4px;background:rgba(148,163,184,0.14);color:#cbd5e1;">\${escapeHtml(t)}</span>\`
+        ).join('');
+        return \`<div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;padding:0.6rem 0.75rem;border-radius:8px;background:rgba(30,41,59,0.75);border:1px solid \${added ? 'rgba(16,185,129,0.45)' : 'var(--border)'};flex-wrap:wrap;">
+          <div style="flex:1;min-width:220px;">
+            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+              <span style="font-size:0.78rem;font-weight:700;color:#818cf8;background:rgba(99,102,241,0.16);padding:0.12rem 0.45rem;border-radius:5px;">#\${item.id}</span>
+              <span style="font-size:0.88rem;font-weight:600;color:var(--text);word-break:break-word;">\${escapeHtml(item.title)}</span>
+            </div>
+            \${tagsHtml ? \`<div style="display:flex;gap:0.35rem;flex-wrap:wrap;margin-top:0.35rem;">\${tagsHtml}</div>\` : ''}
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem;shrink:0;">
+            <a href="\${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="padding:0.35rem 0.75rem;font-size:0.8rem;text-decoration:none;">🔗 打开</a>
+            <button type="button" class="btn \${added ? 'btn-danger' : 'btn-primary'}" style="padding:0.35rem 0.85rem;font-size:0.8rem;" onclick="toggleWhitelistItem(\${item.id})">\${added ? '✓ 已添加 (移除)' : '+ 添加'}</button>
+          </div>
+        </div>\`;
+      }).join('');
+    }
+
+    async function loadUpstreamVideos(page = 1) {
+      const targetPage = Math.max(1, page);
+      const listEl = document.getElementById('whitelistVideoList');
+      const searchInput = document.getElementById('whitelistVideoSearch');
+      const q = searchInput ? searchInput.value.trim() : '';
+      const secret = getSecret();
+      if (listEl) {
+        listEl.innerHTML = '<span style="font-size: 0.84rem; color: var(--text-muted); padding: 0.5rem;">正在加载网站视频列表...</span>';
+      }
+      try {
+        const query = new URLSearchParams({ page: String(targetPage), size: '20' });
+        if (q) query.set('q', q);
+        const res = await fetch('/api/admin/whitelist/videos?' + query.toString(), {
+          headers: { 'X-Internal-Secret': secret },
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          if (listEl) {
+            listEl.innerHTML = \`<span style="font-size: 0.84rem; color: #fca5a5; padding: 0.5rem;">加载失败：\${escapeHtml(data.message || '未知错误')}</span>\`;
+          }
+          return;
+        }
+        whitelistVideos = Array.isArray(data.items) ? data.items : [];
+        whitelistVideos.forEach(item => { whitelistTitleMap[item.id] = item.title; });
+        whitelistVideoPage = data.pagination?.page || targetPage;
+        whitelistVideoPages = Math.max(1, data.pagination?.pages || 1);
+        renderWhitelistConfig();
+        renderUpstreamVideos();
+      } catch (err) {
+        if (listEl) {
+          listEl.innerHTML = \`<span style="font-size: 0.84rem; color: #fca5a5; padding: 0.5rem;">请求异常：\${escapeHtml(err.message)}</span>\`;
+        }
+      }
+    }
+
+    async function toggleWhitelistItem(id) {
+      const list = Array.isArray(whitelistConfig.ids) ? [...whitelistConfig.ids] : [];
+      const exists = list.includes(id);
+      whitelistConfig.ids = exists ? list.filter(item => item !== id) : [...list, id];
+      renderWhitelistConfig();
+      renderUpstreamVideos();
+      await saveWhitelistConfig();
+    }
+
+    function toggleWhitelistEnabled() {
+      whitelistConfig.enabled = !whitelistConfig.enabled;
+      renderWhitelistConfig();
+      updateWhitelistConfigStatus('unsaved');
+    }
+
+    function appendWhitelistFromInput() {
+      const input = document.getElementById('whitelistBatchInput');
+      const parsed = parseWhitelistTokens(input.value);
+      if (!parsed.length) {
+        showToast('未识别到有效的视频 ID 或 /video/ID 链接', 'error');
+        return;
+      }
+      const existing = new Set(whitelistConfig.ids || []);
+      let added = 0;
+      for (const id of parsed) {
+        if (!existing.has(id)) {
+          existing.add(id);
+          whitelistConfig.ids.push(id);
+          added++;
+        }
+      }
+      input.value = '';
+      renderWhitelistConfig();
+      updateWhitelistConfigStatus('unsaved');
+      showToast(\`已解析 \${parsed.length} 个 ID，新增 \${added} 个\`, 'success');
+    }
+
+    function removeWhitelistId(id) {
+      whitelistConfig.ids = (whitelistConfig.ids || []).filter(item => item !== id);
+      renderWhitelistConfig();
+      renderUpstreamVideos();
+      updateWhitelistConfigStatus('unsaved');
+    }
+
+    function clearWhitelistIds() {
+      if (!whitelistConfig.ids.length) return;
+      if (!confirm('确定要清空当前白名单 ID 列表吗？')) return;
+      whitelistConfig.ids = [];
+      renderWhitelistConfig();
+      renderUpstreamVideos();
+      updateWhitelistConfigStatus('unsaved');
+    }
+
+    async function loadWhitelistConfig() {
+      const secret = getSecret();
+      try {
+        const res = await fetch('/api/admin/whitelist', {
+          headers: { 'X-Internal-Secret': secret },
+        });
+        const data = await res.json();
+        if (data.ok && data.data) {
+          whitelistConfig = {
+            enabled: data.data.enabled === true,
+            ids: Array.isArray(data.data.ids) ? data.data.ids : [],
+          };
+          renderWhitelistConfig();
+          updateWhitelistConfigStatus('saved');
+        }
+      } catch (err) {
+        console.error('加载白名单配置失败', err);
+      }
+    }
+
+    async function saveWhitelistConfig() {
+      const secret = getSecret();
+      const input = document.getElementById('whitelistBatchInput');
+      if (input && input.value.trim()) {
+        const extra = parseWhitelistTokens(input.value);
+        const existing = new Set(whitelistConfig.ids || []);
+        for (const id of extra) {
+          if (!existing.has(id)) {
+            existing.add(id);
+            whitelistConfig.ids.push(id);
+          }
+        }
+        input.value = '';
+      }
+      try {
+        const res = await fetch('/api/admin/whitelist', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Secret': secret,
+          },
+          body: JSON.stringify({
+            enabled: whitelistConfig.enabled,
+            ids: whitelistConfig.ids,
+          }),
+        });
+        const data = await res.json();
+        if (data.ok && data.data) {
+          whitelistConfig = {
+            enabled: data.data.enabled === true,
+            ids: Array.isArray(data.data.ids) ? data.data.ids : [],
+          };
+          renderWhitelistConfig();
+          updateWhitelistConfigStatus('saved');
+          showToast('视频白名单配置保存成功', 'success');
+        } else {
+          showToast(data.message || '保存白名单失败', 'error');
+        }
+      } catch (err) {
+        showToast('保存白名单异常: ' + err.message, 'error');
       }
     }
   </script>

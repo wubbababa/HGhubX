@@ -15,6 +15,8 @@ import { DesktopRail, DesktopTitleBar } from "./components/DesktopChrome";
 import ResizeHandles from "./components/ResizeHandles";
 import { tracePlayback } from "./playbackDiagnostics";
 import { IGrid, IGridF, IHome, IHomeF, ISearch, IUser, IUserF } from "./icons";
+import AgeGateModal, { hasVerifiedAge } from "./components/AgeGateModal";
+import { filterAllowedVideos, loadWhitelistConfig, useVideoWhitelist } from "./whitelist";
 
 // Local chunks load on first visit; visited tabs stay mounted as before.
 const Search = lazy(() => import("./pages/Search"));
@@ -73,9 +75,29 @@ function StackPage(props: Parameters<typeof StackPageContent>[0]) {
 function StackPageContent({ page, onBack, wide, top, bottomInset }: {
   page: Page; onBack: () => void; wide: boolean; top: boolean; bottomInset: number;
 }) {
-  if (page.kind === "feed") {
+  const whitelist = useVideoWhitelist();
+  if (whitelist.active && (page.kind === "posts" || page.kind === "post" || (page.kind === "feed" && page.feedKind === "post"))) {
     return (
-      <Feed videoIds={page.videoIds} startIndex={page.index} title={page.title} kind={page.feedKind || "video"}
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-bg p-6 text-center">
+        <p className="text-[14px] text-mut">当前为精选白名单模式，社区帖子暂不可访问。</p>
+        <Button variant="primary" className="min-h-10 px-5 rounded-(--r-ctl)" onClick={onBack}>返回</Button>
+      </div>
+    );
+  }
+  if (page.kind === "feed") {
+    const allowedIds = whitelist.active ? filterAllowedVideos(page.videoIds.map(id => ({ id }))).map(x => x.id) : page.videoIds;
+    if (whitelist.active && !allowedIds.length) {
+      return (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-bg p-6 text-center">
+          <p className="text-[14px] text-mut">当前为精选白名单模式，该视频暂不可播放。</p>
+          <Button variant="primary" className="min-h-10 px-5 rounded-(--r-ctl)" onClick={onBack}>返回</Button>
+        </div>
+      );
+    }
+    const targetId = page.videoIds[page.index];
+    const nextIndex = whitelist.active ? Math.max(0, allowedIds.indexOf(targetId)) : page.index;
+    return (
+      <Feed videoIds={allowedIds} startIndex={nextIndex} title={page.title} kind={page.feedKind || "video"}
         startEp={page.startEp} startTime={page.startTime}
         mode="context" active={top} bottomInset={bottomInset} onBack={onBack} />
     );
@@ -260,6 +282,15 @@ function MobileShell() {
 export default function App() {
   const { platform, loginOpen, setLoginOpen, tab, setTab, stack, pop, fs, setFs } = useStore();
   const { isMobileView } = useResponsive();
+  const [ageVerified, setAgeVerified] = useState(() => hasVerifiedAge());
+  const whitelist = useVideoWhitelist();
+
+  useEffect(() => {
+    if (!isTauriApp && ageVerified) {
+      void loadWhitelistConfig();
+    }
+  }, [ageVerified]);
+
   useEffect(() => {
     tracePlayback("navigation.change", { tab, stack: stack.map(p => ({ page: p.kind, key: p.key })), login_open: loginOpen });
   }, [tab, stack, loginOpen]);
@@ -336,6 +367,24 @@ export default function App() {
     }, 2500);
     return () => window.clearTimeout(t);
   }, []);
+
+  if (!isTauriApp && !ageVerified) {
+    return (
+      <>
+        <AgeGateModal onConfirm={() => setAgeVerified(true)} />
+        <ToastHost />
+      </>
+    );
+  }
+
+  if (!isTauriApp && whitelist.status !== "ready") {
+    return (
+      <>
+        <PageLoading />
+        <ToastHost />
+      </>
+    );
+  }
 
   return (
     <>

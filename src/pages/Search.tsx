@@ -9,20 +9,23 @@ import { FilteredContent } from "../components/FilteredContent";
 import { Empty } from "../components/ui";
 import { useSearchResults } from "../useSearchResults";
 import { SearchTags } from "../components/SearchTags";
+import { filterAllowedVideos, useVideoWhitelist } from "../whitelist";
 import { IBack, IChevR, IClose, IFireF, IPlayF, IRefresh, ISearch, ITrophy } from "../icons";
 
 export default function Search({ active, wide }: { active: boolean; wide: boolean }) {
   const { push, searchHist, addSearch, clearSearchHist, lineEpoch, accountScope } = useStore();
+  const whitelist = useVideoWhitelist();
   const [q, setQ] = useState("");
   const [submitted, setSubmitted] = useState("");
   const [tab, setTab] = useState<"video" | "post">("video");
   const results = useSearchResults();
   const { result, request, loading, error: err } = results;
-  const items = result?.kind === "video" ? result.items as VideoCard[] : [];
-  const posts = result?.kind === "post" ? result.items as Post[] : [];
-  const count = result?.items.length ?? 0;
+  const items = result?.kind === "video" ? filterAllowedVideos(result.items as VideoCard[]) : [];
+  const posts = !whitelist.active && result?.kind === "post" ? result.items as Post[] : [];
+  const count = result?.kind === "video" ? items.length : posts.length;
   const inputRef = useRef<HTMLInputElement>(null);
-  const [hotVideos, setHotVideos] = useState<HotSearchVideo[]>([]);
+  const [rawHotVideos, setHotVideos] = useState<HotSearchVideo[]>([]);
+  const hotVideos = whitelist.active ? filterAllowedVideos(rawHotVideos) : rawHotVideos;
   const [hotLoading, setHotLoading] = useState(false);
   const [hotError, setHotError] = useState<string | null>(null);
   const hotBusy = useRef(false);
@@ -80,7 +83,7 @@ export default function Search({ active, wide }: { active: boolean; wide: boolea
         <Form className="ios-search-form flex-1 min-w-0 flex items-center gap-2"
           onSubmit={(e) => { e.preventDefault(); submit(q); }}>
           <ISearch size={17} className="text-mut shrink-0" />
-          <Input aria-label="搜索短剧、帖子、题材…" ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索短剧、帖子、题材…"
+          <Input aria-label={whitelist.active ? "搜索短剧、题材…" : "搜索短剧、帖子、题材…"} ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder={whitelist.active ? "搜索短剧、题材…" : "搜索短剧、帖子、题材…"}
             className="flex-1 min-w-0 bg-transparent text-[14px] text-on placeholder-dim outline-none" />
           {q && <Button aria-label="清空搜索" type="button" onClick={() => { results.clear(); setQ(""); setSubmitted(""); inputRef.current?.focus(); }} className="ios-icon-button ios-search-clear"><IClose size={16} /></Button>}
         </Form>
@@ -144,11 +147,11 @@ export default function Search({ active, wide }: { active: boolean; wide: boolea
           </>
         ) : (
           <>
-            <SegmentedControl className="mt-1 mb-3" aria-label="搜索结果类型" activeIndex={tab === "video" ? 0 : 1}>
+            {!whitelist.active && <SegmentedControl className="mt-1 mb-3" aria-label="搜索结果类型" activeIndex={tab === "video" ? 0 : 1}>
               {([["video", "视频"], ["post", "帖子"]] as const).map(([k, label]) => (
                 <Button aria-pressed={tab === k} key={k} onClick={() => changeTab(k)}>{label}</Button>
               ))}
-            </SegmentedControl>
+            </SegmentedControl>}
             <div role="status" className="text-[12px] text-mut mb-2.5" aria-live="polite">
               {loading && <span className="block">{request?.page === 1 ? `正在搜索「${submitted}」…` : "正在加载更多…"}</span>}
               {result && <>「{result.keyword}」已加载 <span className="text-primary font-bold">{count}{result.total !== null ? ` / ${result.total}` : ""}</span> 条{result.kind === "post" ? "帖子" : "视频"}</>}
@@ -197,6 +200,7 @@ const RANK_TABS = [
 
 export function RankPage({ onBack, wide }: { onBack: () => void; wide: boolean }) {
   const { push } = useStore();
+  const whitelist = useVideoWhitelist();
   type RankKind = typeof RANK_TABS[number]["k"];
   type RankState = { items: RankItem[]; loadedAt: number; loading: boolean; error: string };
   const [tab, setTab] = useState<RankKind>("hot");
@@ -226,7 +230,8 @@ export function RankPage({ onBack, wide }: { onBack: () => void; wide: boolean }
     if (!cache.current[tab]?.loadedAt || Date.now() - cache.current[tab]!.loadedAt > 60_000) void load(tab);
   }, [tab]);
   const state = states[tab];
-  const items = state?.items ?? [];
+  const rawItems = state?.items ?? [];
+  const items = whitelist.active ? filterAllowedVideos(rawItems) : rawItems;
   const loading = state?.loading ?? true;
   const err = state?.error ?? "";
   const max = Math.max(1, ...items.map((x) => x.metric_value || 0));

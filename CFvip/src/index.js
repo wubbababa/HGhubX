@@ -11,9 +11,59 @@
  * 7.  POST /api/admin/pay/config           - 管理员更新支付相关配置
  * 8.  GET  /api/pay/config                 - 公开获取前端支付配置 (套餐、网关、启用状态)
  * 9.  GET  /api/vip/info?username=xxx      - 获取用户 VIP 详细信息及支付关联记录
+ * 10. GET  /api/whitelist                  - 公开获取 Web 端视频 ID 白名单配置
+ * 11. GET  /api/admin/whitelist            - 管理员获取视频 ID 白名单配置
+ * 12. POST /api/admin/whitelist            - 管理员更新视频 ID 白名单配置
  */
 
 import { renderAdminHtml } from "./admin.js";
+
+const WHITELIST_KV_KEY = "config:video_whitelist";
+const UPSTREAM_BASE = "https://huangguoai.com";
+const DEFAULT_WHITELIST_CONFIG = {
+  enabled: false,
+  ids: [],
+  updated_at: null,
+};
+
+/** 从数组或混合文本（支持纯数字 ID 与 /video/16105/ 链接）中解析并去重视频 ID */
+function parseWhitelistIds(input) {
+  const tokens = Array.isArray(input)
+    ? input.map((item) => String(item))
+    : typeof input === "string"
+      ? input.split(/[\s,，;；]+/)
+      : [];
+  const seen = new Set();
+  const ids = [];
+  for (const token of tokens) {
+    const trimmed = token.trim();
+    if (!trimmed) continue;
+    const urlMatch = trimmed.match(/\/video\/(\d+)/i);
+    const numStr = urlMatch ? urlMatch[1] : (/^\d+$/.test(trimmed) ? trimmed : "");
+    if (!numStr) continue;
+    const id = Number.parseInt(numStr, 10);
+    if (Number.isSafeInteger(id) && id > 0 && !seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return ids;
+}
+
+async function readWhitelistConfig(env) {
+  const raw = await env.VIP_KV.get(WHITELIST_KV_KEY);
+  if (!raw) return { ...DEFAULT_WHITELIST_CONFIG };
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      enabled: parsed?.enabled === true,
+      ids: parseWhitelistIds(parsed?.ids),
+      updated_at: parsed?.updated_at || null,
+    };
+  } catch {
+    return { ...DEFAULT_WHITELIST_CONFIG };
+  }
+}
 
 // 默认支付配置
 const DEFAULT_PAY_CONFIG = {
@@ -380,6 +430,142 @@ export default {
         return jsonResponse({ ok: true, exists: false, is_vip: false });
       }
       return jsonResponse({ ok: true, exists: true, data: JSON.parse(raw) });
+    }
+
+    // 9. 公开获取 Web 端视频 ID 白名单配置 GET /api/whitelist
+    if (url.pathname === "/api/whitelist" && request.method === "GET") {
+      try {
+        const config = await readWhitelistConfig(env);
+        return jsonResponse({
+          ok: true,
+          enabled: config.enabled,
+          ids: config.ids,
+          updated_at: config.updated_at,
+        });
+      } catch (err) {
+        return jsonResponse({ ok: false, message: "读取白名单配置异常: " + err.message }, 500);
+      }
+    }
+
+    // 10. 管理员获取视频 ID 白名单配置 GET /api/admin/whitelist
+    if (url.pathname === "/api/admin/whitelist" && request.method === "GET") {
+      if (!checkAdminAuth(request, env)) {
+        return jsonResponse({ ok: false, message: "未授权：请提供有效的管理密钥" }, 401);
+      }
+      try {
+        const config = await readWhitelistConfig(env);
+        return jsonResponse({ ok: true, data: config });
+      } catch (err) {
+        return jsonResponse({ ok: false, message: "读取白名单配置异常: " + err.message }, 500);
+      }
+    }
+
+    // 11. 管理员更新视频 ID 白名单配置 POST /api/admin/whitelist
+    if (url.pathname === "/api/admin/whitelist" && request.method === "POST") {
+      if (!checkAdminAuth(request, env)) {
+        return jsonResponse({ ok: false, message: "未授权：请提供有效的管理密钥" }, 401);
+      }
+      let payload;
+      try {
+        payload = await request.json();
+      } catch {
+        return jsonResponse({ ok: false, message: "无效的 JSON 数据" }, 400);
+      }
+      try {
+        const existing = await readWhitelistConfig(env);
+        const enabled = payload.enabled !== undefined ? payload.enabled === true : existing.enabled;
+        let ids = existing.ids;
+        if (payload.ids !== undefined || payload.raw !== undefined) {
+          ids = parseWhitelistIds(payload.ids !== undefined ? payload.ids : payload.raw);
+        }
+        const next = {
+          enabled,
+          ids,
+          updated_at: new Date().toISOString(),
+        };
+        await env.VIP_KV.put(WHITELIST_KV_KEY, JSON.stringify(next));
+        return jsonResponse({
+          ok: true,
+          message: "视频白名单配置已保存",
+          data: next,
+        });
+      } catch (err) {
+        return jsonResponse({ ok: false, message: "保存白名单配置异常: " + err.message }, 500);
+      }
+    }
+
+    // 12. 管理员拉取上游视频列表（用于后台预览标题、打开链接并一键加入白名单）
+    if (url.pathname === "/api/admin/whitelist/videos" && request.method === "GET") {
+      if (!checkAdminAuth(request, env)) {
+        return jsonResponse({ ok: false, message: "未授权：请提供有效的管理密钥" }, 401);
+      }
+      const page = Math.max(1, Number.parseInt(url.searchParams.get("page") || "1", 10) || 1);
+      const size = Math.min(50, Math.max(1, Number.parseInt(url.searchParams.get("size") || "20", 10) || 20));
+      const q = (url.searchParams.get("q") || "").trim();
+
+      try {
+        const idMatch = q.match(/\/video\/(\d+)/i);
+        const directId = idMatch ? idMatch[1] : (/^\d+$/.test(q) ? q : "");
+        let items = [];
+        let pagination = { page, pages: 1, size, total: 0 };
+
+        if (directId) {
+          const upstream = await fetch(`${UPSTREAM_BASE}/api/videos/${directId}`, {
+            headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" },
+          });
+          if (upstream.ok) {
+            const detail = await upstream.json();
+            const vid = Number.parseInt(String(detail?.id ?? directId), 10);
+            if (Number.isSafeInteger(vid) && vid > 0 && detail?.title) {
+              items = [{
+                id: vid,
+                title: String(detail.title),
+                tags: Array.isArray(detail.tags) ? detail.tags : [],
+                url: `${UPSTREAM_BASE}/video/${vid}/`,
+              }];
+              pagination = { page: 1, pages: 1, size: 1, total: 1 };
+            }
+          }
+        } else {
+          const target = q
+            ? `${UPSTREAM_BASE}/api/search?q=${encodeURIComponent(q)}&page=${page}&size=${size}`
+            : `${UPSTREAM_BASE}/api/videos?page=${page}&size=${size}`;
+          const upstream = await fetch(target, {
+            headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" },
+          });
+          if (!upstream.ok) {
+            return jsonResponse({ ok: false, message: `上游接口返回 HTTP ${upstream.status}` }, 502);
+          }
+          const data = await upstream.json();
+          const rawItems = Array.isArray(data?.items) ? data.items : [];
+          items = rawItems
+            .map((item) => {
+              const vid = Number.parseInt(String(item?.id ?? ""), 10);
+              if (!Number.isSafeInteger(vid) || vid <= 0) return null;
+              return {
+                id: vid,
+                title: String(item?.title || `视频 #${vid}`),
+                tags: Array.isArray(item?.tags) ? item.tags : [],
+                url: `${UPSTREAM_BASE}/video/${vid}/`,
+              };
+            })
+            .filter(Boolean);
+          if (data?.pagination) {
+            pagination = {
+              page: Number(data.pagination.page) || page,
+              pages: Number(data.pagination.pages) || 1,
+              size: Number(data.pagination.size) || size,
+              total: Number(data.pagination.total) || items.length,
+            };
+          } else {
+            pagination.total = items.length;
+          }
+        }
+
+        return jsonResponse({ ok: true, items, pagination });
+      } catch (err) {
+        return jsonResponse({ ok: false, message: "拉取上游视频列表异常: " + err.message }, 500);
+      }
     }
 
     return jsonResponse({ ok: false, message: "未找到该接口" }, 404);

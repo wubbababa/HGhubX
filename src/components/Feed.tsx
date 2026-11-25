@@ -28,6 +28,7 @@ import {
   ILink, IList, ILockF, IPauseF, IPlayF, ISearch, IStar, IStarF, IVertSwap, IVol, IVolMute,
 } from "../icons";
 import { clampSeekTime, shouldEnforceVipTrial, syncVipStatusFromRemote, VIP_TRIAL_LIMIT_SECONDS } from "../vip";
+import { isVideoAllowed, useVideoWhitelist } from "../whitelist";
 
 type Props = {
   videoIds: number[];
@@ -45,7 +46,13 @@ type Props = {
   startTime?: number;
 };
 
-export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind = "video", active, bottomInset, onBack, onNearEnd, onBlocked, startEp, startTime }: Props) {
+export default function Feed({ videoIds: rawVideoIds, startIndex = 0, title = "", mode, kind = "video", active, bottomInset, onBack, onNearEnd, onBlocked, startEp, startTime }: Props) {
+  const whitelist = useVideoWhitelist();
+  const videoIds = useMemo(() => {
+    if (!whitelist.active) return rawVideoIds;
+    if (kind === "post") return [];
+    return rawVideoIds.filter((id) => isVideoAllowed(id));
+  }, [whitelist.active, kind, rawVideoIds]);
   const store = useStore();
   const { isLiked, isFav, setLiked, setCollected, setFollowing, actionPending, accountScope, muted, setMuted, volume, setVolume, toast, addHistory, user, setLoginOpen, setVipOpen, swipeEp, setSwipeEp, preferHevc, setPreferHevc } = store;
   const { isDesktopView } = useResponsive();
