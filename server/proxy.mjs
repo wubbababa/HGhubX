@@ -44,9 +44,9 @@ export async function forwardEdgeRequest({ origin = DEFAULT_BASE, method = "GET"
     headers,
   };
 
-  if (httpMethod !== "GET" && httpMethod !== "HEAD") {
+  if (httpMethod !== "GET" && httpMethod !== "HEAD" && body !== undefined && body !== null) {
     headers["Content-Type"] = "application/json";
-    options.body = body !== undefined && body !== null ? JSON.stringify(body) : JSON.stringify({});
+    options.body = JSON.stringify(body);
   }
 
   const res = await fetch(targetUrl, options);

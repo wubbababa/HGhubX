@@ -56,23 +56,46 @@ function normalizeAccount(data, origin) {
   if (user.id !== undefined && user.id !== null) {
     user.id = Number(user.id);
   }
-  const rawInteractions = data?.interactions || user.interactions || {};
-  const interactions = {
-    favorite_video_ids: Array.isArray(rawInteractions.favorite_video_ids) ? rawInteractions.favorite_video_ids : [],
-    like_video_ids: Array.isArray(rawInteractions.like_video_ids) ? rawInteractions.like_video_ids : [],
-    follow_user_ids: Array.isArray(rawInteractions.follow_user_ids) ? rawInteractions.follow_user_ids : [],
-    like_post_ids: Array.isArray(rawInteractions.like_post_ids) ? rawInteractions.like_post_ids : [],
-    favorite_post_ids: Array.isArray(rawInteractions.favorite_post_ids) ? rawInteractions.favorite_post_ids : [],
-    ...rawInteractions,
-  };
-  user.interactions = interactions;
-  const tok = data?.token || source?.token || data?.user?.token || data?.access_token || source?.access_token || data?.jwt || data?.auth_token;
-  return {
+  // 仅当上游确实返回了 interactions 对象时才透传，避免缺失字段时被空数组覆盖本地状态
+  const rawInteractions = data?.interactions && typeof data.interactions === "object"
+    ? data.interactions
+    : (user.interactions && typeof user.interactions === "object" ? user.interactions : null);
+  const result = {
     user,
     origin,
-    interactions,
-    token: tok,
+    token: data?.token || source?.token || data?.user?.token || data?.access_token || source?.access_token || data?.jwt || data?.auth_token,
   };
+  if (rawInteractions) {
+    user.interactions = rawInteractions;
+    result.interactions = rawInteractions;
+  }
+  return result;
+}
+
+/**
+ * 互动操作成功后同步更新服务端会话缓存，防止回退或刷新时丢失最新状态
+ */
+function updateCachedInteraction(token, field, id, on) {
+  if (!token) return;
+  const cached = activeSessions.get(token);
+  if (!cached || !cached.user) return;
+  const targetId = Number(id);
+  if (!Number.isSafeInteger(targetId) || targetId <= 0) return;
+  const prev = cached.user.interactions && typeof cached.user.interactions === "object"
+    ? cached.user.interactions
+    : {};
+  const list = Array.isArray(prev[field]) ? prev[field].map(Number).filter(n => Number.isSafeInteger(n) && n > 0) : [];
+  const nextList = on
+    ? [targetId, ...list.filter(item => item !== targetId)]
+    : list.filter(item => item !== targetId);
+  cached.user = {
+    ...cached.user,
+    interactions: {
+      ...prev,
+      [field]: nextList,
+    },
+  };
+  saveSessionsToDisk();
 }
 
 function normalizeAccountHistory(value) {
@@ -203,8 +226,15 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
         });
         const normalized = normalizeAccount(res, currentBase);
         if (token && normalized.user?.id) {
+          const mergedInteractions = normalized.interactions || cached?.user?.interactions;
+          const mergedUser = { ...(cached?.user || {}), ...normalized.user };
+          if (mergedInteractions) {
+            mergedUser.interactions = mergedInteractions;
+            normalized.user.interactions = mergedInteractions;
+            normalized.interactions = mergedInteractions;
+          }
           activeSessions.set(token, {
-            user: { ...(cached?.user || {}), ...normalized.user },
+            user: mergedUser,
             token,
             cookies: res?._cookies || cached?.cookies || "",
           });
@@ -216,19 +246,13 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
         // 回退返回缓存资料，坚决防止误判登出
         if (cached && cached.user?.id) {
           const cachedUser = cached.user;
-          const rawInteractions = cachedUser.interactions || {};
-          const interactions = {
-            favorite_video_ids: Array.isArray(rawInteractions.favorite_video_ids) ? rawInteractions.favorite_video_ids : [],
-            like_video_ids: Array.isArray(rawInteractions.like_video_ids) ? rawInteractions.like_video_ids : [],
-            follow_user_ids: Array.isArray(rawInteractions.follow_user_ids) ? rawInteractions.follow_user_ids : [],
-            like_post_ids: Array.isArray(rawInteractions.like_post_ids) ? rawInteractions.like_post_ids : [],
-            favorite_post_ids: Array.isArray(rawInteractions.favorite_post_ids) ? rawInteractions.favorite_post_ids : [],
-            ...rawInteractions,
-          };
+          const interactions = cachedUser.interactions && typeof cachedUser.interactions === "object"
+            ? cachedUser.interactions
+            : undefined;
           return {
-            user: { ...cachedUser, interactions },
+            user: interactions ? { ...cachedUser, interactions } : { ...cachedUser },
             origin: currentBase,
-            interactions,
+            ...(interactions ? { interactions } : {}),
             token,
           };
         }
@@ -320,11 +344,17 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
       }
     }
     case "api_original_videos": {
-      const sortParam = args.sort ? `&sort=${encodeURIComponent(args.sort)}` : "";
+      const cate = args.cate || "all";
+      const page = args.page || 1;
+      const size = args.size || 20;
+      const sortParam = args.sort && String(args.sort).trim() ? `&sort=${encodeURIComponent(args.sort)}` : "";
+      const path = cate === "all"
+        ? `/api/videos?is_original=1&page=${page}&size=${size}${sortParam}`
+        : `/api/videos/category/${encodeURIComponent(cate)}?is_original=1&page=${page}&size=${size}${sortParam}`;
       return forwardEdgeRequest({
         origin: currentBase,
         method: "GET",
-        path: `/api/videos/original?cate=${encodeURIComponent(args.cate || "")}&page=${args.page || 1}&size=${args.size || 20}${sortParam}`,
+        path,
         token,
       });
     }
@@ -452,53 +482,63 @@ export async function executeCommand(cmd, args = {}, authHeader = "") {
     case "api_like": {
       const cached = token ? activeSessions.get(token) : null;
       const ep = args.ep || 1;
-      return forwardEdgeRequest({
+      const res = await forwardEdgeRequest({
         origin: currentBase,
         method: args.on ? "POST" : "DELETE",
         path: `/api/videos/${args.id}/like?ep=${ep}`,
         token,
         cookies: cached?.cookies,
       });
+      updateCachedInteraction(token, "like_video_ids", args.id, !!args.on);
+      return res;
     }
     case "api_collect": {
       const cached = token ? activeSessions.get(token) : null;
-      return forwardEdgeRequest({
+      const res = await forwardEdgeRequest({
         origin: currentBase,
         method: args.on ? "POST" : "DELETE",
         path: `/api/videos/${args.id}/collect`,
         token,
         cookies: cached?.cookies,
       });
+      updateCachedInteraction(token, "favorite_video_ids", args.id, !!args.on);
+      return res;
     }
     case "api_follow": {
       const cached = token ? activeSessions.get(token) : null;
-      return forwardEdgeRequest({
+      const res = await forwardEdgeRequest({
         origin: currentBase,
         method: args.on ? "POST" : "DELETE",
         path: `/api/users/${args.uid}/follow`,
         token,
         cookies: cached?.cookies,
       });
+      updateCachedInteraction(token, "follow_user_ids", args.uid, !!args.on);
+      return res;
     }
     case "api_post_like": {
       const cached = token ? activeSessions.get(token) : null;
-      return forwardEdgeRequest({
+      const res = await forwardEdgeRequest({
         origin: currentBase,
         method: args.on ? "POST" : "DELETE",
         path: `/api/posts/${args.id}/like`,
         token,
         cookies: cached?.cookies,
       });
+      updateCachedInteraction(token, "like_post_ids", args.id, !!args.on);
+      return res;
     }
     case "api_post_collect": {
       const cached = token ? activeSessions.get(token) : null;
-      return forwardEdgeRequest({
+      const res = await forwardEdgeRequest({
         origin: currentBase,
         method: args.on ? "POST" : "DELETE",
         path: `/api/posts/${args.id}/collect`,
         token,
         cookies: cached?.cookies,
       });
+      updateCachedInteraction(token, "favorite_post_ids", args.id, !!args.on);
+      return res;
     }
     case "api_post_comments": {
       return forwardEdgeRequest({
