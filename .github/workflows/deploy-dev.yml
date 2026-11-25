@@ -1,0 +1,127 @@
+name: CD (Dev)
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+concurrency:
+  group: cd-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build & Deploy Dev to Server (3001)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm build
+
+      - name: Compress artifacts
+        run: |
+          tar -czf dist-dev.tar.gz dist/
+          tar -czf server-dev.tar.gz server/ package.json
+
+      - name: Deploy to Server via SSH
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          source: "dist-dev.tar.gz,server-dev.tar.gz"
+          target: "/tmp"
+
+      - name: Setup & Restart Dev Service
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            set -e
+            TARGET_PATH="${{ secrets.SERVER_DEV_PATH || '/opt/hghubx-dev' }}"
+            SERVICE_NAME="hghubx-dev"
+            DEV_PORT="3001"
+
+            mkdir -p "$TARGET_PATH"
+            tar -xzf /tmp/dist-dev.tar.gz -C "$TARGET_PATH"
+            tar -xzf /tmp/server-dev.tar.gz -C "$TARGET_PATH"
+            rm -f /tmp/dist-dev.tar.gz /tmp/server-dev.tar.gz
+
+            # 首次部署时自动创建独立的 systemd 服务，避免覆盖线上配置
+            if [ ! -f "/etc/systemd/system/${SERVICE_NAME}.service" ]; then
+              # 查找可用的 node 路径（兼容 nvm 等非默认 PATH 安装）
+              NODE_BIN="$(command -v node || true)"
+              if [ -z "$NODE_BIN" ]; then
+                for candidate in /usr/local/bin/node /usr/bin/node; do
+                  if [ -x "$candidate" ]; then
+                    NODE_BIN="$candidate"
+                    break
+                  fi
+                done
+              fi
+              if [ -z "$NODE_BIN" ]; then
+                for unit in /etc/systemd/system/hghubx.service /etc/systemd/system/hghub.service; do
+                  if [ -f "$unit" ]; then
+                    NODE_BIN="$(grep -E '^ExecStart=' "$unit" | head -n 1 | sed -E 's/^ExecStart=([^ ]+).*/\1/')"
+                    [ -n "$NODE_BIN" ] && break
+                  fi
+                done
+              fi
+              if [ -z "$NODE_BIN" ]; then
+                echo "未找到 node 可执行文件，请检查服务器 Node.js 安装路径"
+                exit 1
+              fi
+
+              cat <<EOF > "/etc/systemd/system/${SERVICE_NAME}.service"
+            [Unit]
+            Description=HGhubX Web Dev Service (Port ${DEV_PORT})
+            After=network.target
+
+            [Service]
+            Type=simple
+            User=root
+            WorkingDirectory=${TARGET_PATH}
+            Environment=PORT=${DEV_PORT}
+            Environment=NODE_ENV=production
+            ExecStart=${NODE_BIN} --use-env-proxy server/index.mjs
+            Restart=always
+            RestartSec=5
+
+            [Install]
+            WantedBy=multi-user.target
+            EOF
+              systemctl daemon-reload
+              systemctl enable "$SERVICE_NAME"
+            fi
+
+            # 尝试放行服务器本地防火墙 3001 端口
+            if command -v ufw >/dev/null 2>&1; then
+              ufw allow "${DEV_PORT}/tcp" >/dev/null 2>&1 || true
+            elif command -v firewall-cmd >/dev/null 2>&1; then
+              firewall-cmd --zone=public --add-port="${DEV_PORT}/tcp" --permanent >/dev/null 2>&1 || true
+              firewall-cmd --reload >/dev/null 2>&1 || true
+            fi
+
+            systemctl restart "$SERVICE_NAME"
+            systemctl status "$SERVICE_NAME" --no-pager
