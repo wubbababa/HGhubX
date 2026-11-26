@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useStore, type Tab } from "../store";
 import { APP_VERSION, isTauriApp } from "../api";
 import { Avatar } from "./ui";
+import { useVideoWhitelist } from "../whitelist";
 import {
   IClose, IGrid, IGridF, IHome, IHomeF, IMinus, IMoon, IRestore, ISearch, ISettings, ISidebar,
   ISquare, ISun, ITrophy, IUser, IUserF, Logo,
@@ -85,16 +86,19 @@ export function DesktopTitleBar({ collapsed, onToggle }: { collapsed: boolean; o
 
 export function DesktopRail({ collapsed }: { collapsed: boolean }) {
   const { tab, setTab, user, setLoginOpen, push, platform, stack } = useStore();
+  const whitelist = useVideoWhitelist();
   /* 从侧栏进入的栈页（排行榜 / 设置）接管高亮，否则「我的」会一直亮着，看起来不像独立页面 */
   const top = stack[stack.length - 1];
   const railPage: "ranks" | "settings" | null =
     top?.kind === "settings" ? "settings" : top?.kind === "ranks" ? "ranks" : null;
   const onTab = (key: Tab | "search") => !railPage && tab === key;
-  const items: { key: Tab; label: string; Icon: typeof IHome; Filled: typeof IHomeF }[] = [
+  const allItems: { key: Tab; label: string; Icon: typeof IHome; Filled: typeof IHomeF }[] = [
     { key: "home", label: "首页", Icon: IHome, Filled: IHomeF },
     { key: "category", label: "分类", Icon: IGrid, Filled: IGridF },
     { key: "profile", label: "我的", Icon: IUser, Filled: IUserF },
   ];
+  // 白名单模式下关闭并隐藏侧栏「分类」入口
+  const items = whitelist.active ? allItems.filter(item => item.key !== "category") : allItems;
   return (
     <nav className={`win-sidebar ${collapsed ? "is-compact" : ""}`} aria-label="主导航">
       <div className="win-sidebar-inner">

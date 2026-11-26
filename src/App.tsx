@@ -43,18 +43,21 @@ const isSelectableText = (target: EventTarget | null) => target instanceof Eleme
 
 function TabBar() {
   const { tab, setTab, platform } = useStore();
-  const items = [
+  const whitelist = useVideoWhitelist();
+  const allItems = [
     { key: "home", label: "首页", Icon: IHome, Active: IHomeF },
     { key: "search", label: "搜索", Icon: ISearch, Active: ISearch },
     { key: "category", label: "分类", Icon: IGrid, Active: IGridF },
     { key: "profile", label: "我的", Icon: IUser, Active: IUserF },
   ] as const;
-  const index = items.findIndex(item => item.key === tab);
+  // 白名单模式下关闭并隐藏底栏「分类」入口
+  const items = whitelist.active ? allItems.filter(item => item.key !== "category") : allItems;
+  const index = Math.max(0, items.findIndex(item => item.key === tab));
   return <nav className="hg-tabbar ios-mobile-nav" aria-label="主导航" data-over-video={tab === "home"}
     style={{ paddingBottom: platform === "android" ? "var(--sab, 16px)" : "calc(var(--sab, 16px) * .55)" }}>
       <div className="hg-glass">
-      <div className="hg-drop" aria-hidden="true" style={{ transform: `translateX(${index * 100}%)` }}><LiquidIndicator /></div>
-      <div className="ios-mobile-nav-items">
+      <div className="hg-drop" aria-hidden="true" style={{ width: `${100 / items.length}%`, transform: `translateX(${index * 100}%)` }}><LiquidIndicator /></div>
+      <div className="ios-mobile-nav-items" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
         {items.map(({ key, label, Icon, Active }) => {
           const Glyph = tab === key ? Active : Icon;
           return <Button key={key} className="ios-mobile-nav-item" onClick={() => setTab(key)}
@@ -119,6 +122,7 @@ function StackPageContent({ page, onBack, wide, top, bottomInset }: {
 /* ============ 应用主体 ============ */
 function MainTabs({ wide, pageActive, bottomInset }: { wide: boolean; pageActive: boolean; bottomInset: number }) {
   const { tab } = useStore();
+  const whitelist = useVideoWhitelist();
   const [visited, setVisited] = useState<ReadonlySet<Tab>>(() => new Set());
   useEffect(() => {
     if (pageActive) setVisited(previous => previous.has(tab) ? previous : new Set([...previous, tab]));
@@ -129,13 +133,14 @@ function MainTabs({ wide, pageActive, bottomInset }: { wide: boolean; pageActive
   return <>
     <div className={visible("home")} inert={!pageActive || tab !== "home"} aria-hidden={!pageActive || tab !== "home"}>{mounted("home") && <Home active={pageActive && tab === "home"} bottomInset={bottomInset} />}</div>
     <div className={visible("search")} inert={!pageActive || tab !== "search"} aria-hidden={!pageActive || tab !== "search"}>{mounted("search") && <Suspense fallback={<PageLoading />}><Search active={pageActive && tab === "search"} wide={wide} /></Suspense>}</div>
-    <div className={visible("category")} inert={!pageActive || tab !== "category"} aria-hidden={!pageActive || tab !== "category"}>{mounted("category") && <Suspense fallback={<PageLoading />}><Category wide={wide} active={pageActive && tab === "category"} /></Suspense>}</div>
+    {!whitelist.active && <div className={visible("category")} inert={!pageActive || tab !== "category"} aria-hidden={!pageActive || tab !== "category"}>{mounted("category") && <Suspense fallback={<PageLoading />}><Category wide={wide} active={pageActive && tab === "category"} /></Suspense>}</div>}
     <div className={visible("profile")} inert={!pageActive || tab !== "profile"} aria-hidden={!pageActive || tab !== "profile"}>{mounted("profile") && <Suspense fallback={<PageLoading />}><Profile wide={wide} /></Suspense>}</div>
   </>;
 }
 
 function AppBody() {
   const { platform, tab, setTab, stack, pop, loginOpen, setLoginOpen, fs, clean } = useStore();
+  const whitelist = useVideoWhitelist();
   const { isMobileView } = useResponsive();
   const mainRef = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(!isMobileView);
@@ -162,12 +167,14 @@ function AppBody() {
       if (e.key === "Escape") { if (stack.length) pop(); return; }
       if (e.key === "/") { e.preventDefault(); setTab("search"); return; }
       if (["1", "2", "3", "4"].includes(e.key) && !e.repeat) {
-        setTab((["home", "search", "category", "profile"] as Tab[])[Number(e.key) - 1]);
+        const tabs: Tab[] = whitelist.active ? ["home", "search", "profile"] : ["home", "search", "category", "profile"];
+        const nextTab = tabs[Number(e.key) - 1];
+        if (nextTab) setTab(nextTab);
       }
     };
     window.addEventListener("keydown", fn);
     return () => window.removeEventListener("keydown", fn);
-  }, [stack.length, pop, setTab, loginOpen, setLoginOpen]);
+  }, [stack.length, pop, setTab, loginOpen, setLoginOpen, whitelist.active]);
 
   const pageActive = stack.length === 0 && !loginOpen;
   const bottomInset = isMobileView ? (fs || clean ? 0 : 74) : 14;
@@ -218,6 +225,7 @@ function DesktopShell() {
 
 function ShellInner({ collapsed, theater }: { collapsed: boolean; theater: boolean }) {
   const { stack, pop, loginOpen, setLoginOpen, tab, setTab, platform } = useStore();
+  const whitelist = useVideoWhitelist();
   const mainRef = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(true);
 
@@ -241,12 +249,14 @@ function ShellInner({ collapsed, theater }: { collapsed: boolean; theater: boole
       if (e.key === "Escape") { if (stack.length) pop(); return; }
       if (e.key === "/") { e.preventDefault(); setTab("search"); return; }
       if (["1", "2", "3", "4"].includes(e.key) && !e.repeat) {
-        setTab((["home", "search", "category", "profile"] as Tab[])[Number(e.key) - 1]);
+        const tabs: Tab[] = whitelist.active ? ["home", "search", "profile"] : ["home", "search", "category", "profile"];
+        const nextTab = tabs[Number(e.key) - 1];
+        if (nextTab) setTab(nextTab);
       }
     };
     window.addEventListener("keydown", fn);
     return () => window.removeEventListener("keydown", fn);
-  }, [stack.length, pop, setTab, loginOpen, setLoginOpen]);
+  }, [stack.length, pop, setTab, loginOpen, setLoginOpen, whitelist.active]);
 
   const pageActive = stack.length === 0 && !loginOpen;
 
@@ -290,6 +300,13 @@ export default function App() {
       void loadWhitelistConfig();
     }
   }, [ageVerified]);
+
+  // 若处于白名单模式且当前停留在分类页，自动切回首页
+  useEffect(() => {
+    if (whitelist.active && tab === "category") {
+      setTab("home");
+    }
+  }, [whitelist.active, tab, setTab]);
 
   useEffect(() => {
     tracePlayback("navigation.change", { tab, stack: stack.map(p => ({ page: p.kind, key: p.key })), login_open: loginOpen });

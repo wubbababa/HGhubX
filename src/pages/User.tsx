@@ -5,6 +5,7 @@ import { api, fmt } from "../api";
 import type { Paged, UserProfile, VideoCard } from "../types";
 import { useStore } from "../store";
 import { useContentPreferences } from "../contentPreferences";
+import { useVideoWhitelist } from "../whitelist";
 import { Masonry } from "../components/cards";
 import { InplaceSearch } from "../components/InplaceSearch";
 import { Avatar, Empty } from "../components/ui";
@@ -96,6 +97,7 @@ export function FollowingPage({ onBack, wide }: { onBack: () => void; wide: bool
 
 function FollowingContent({ onBack, wide }: { onBack: () => void; wide: boolean }) {
   const { push, user, setLoginOpen, setTab, accountScope } = useStore();
+  const whitelist = useVideoWhitelist();
   const [searching, setSearching] = useState(false);
   // Identity belongs in the dependency list: switching accounts discards the previous feed.
   const request = useCallback((page: number) => api.following(page, 20), [accountScope]);
@@ -114,7 +116,10 @@ function FollowingContent({ onBack, wide }: { onBack: () => void; wide: boolean 
         : state.loading && !state.items.length ? <div className="flex justify-center py-12"><Loader /></div>
         : state.err && !state.items.length ? <Empty icon={<IGrid size={26} />} title="关注流加载失败" sub={state.err} action="重试" onAction={() => void state.loadMore()} />
         : state.items.length ? <Masonry videos={state.items} scopeKey={`following:${accountScope}`} wide={wide} onOpen={video => push({ kind: "feed", videoIds: state.items.map(item => item.id), index: state.items.findIndex(item => item.id === video.id), title: "关注" })} />
-        : <Empty icon={<IGrid size={26} />} title="还没有关注内容" sub="在分类中发现作品，关注喜欢的作者。" action="去分类看看" onAction={() => setTab("category")} />}
+        : <Empty icon={<IGrid size={26} />} title="还没有关注内容"
+            sub={whitelist.active ? "在首页或搜索中发现作品，关注喜欢的作者。" : "在分类中发现作品，关注喜欢的作者。"}
+            action={whitelist.active ? "去首页看看" : "去分类看看"}
+            onAction={() => setTab(whitelist.active ? "home" : "category")} />}
       {user && <PaginationFeedback state={state} />}
     </div>
     {searching && <InplaceSearch kind="video" wide={wide} onClose={() => setSearching(false)} onOpenVideo={(v, list) => push({ kind: "feed", videoIds: list.map(x => x.id), index: list.findIndex(x => x.id === v.id), title: "关注" })} />}
