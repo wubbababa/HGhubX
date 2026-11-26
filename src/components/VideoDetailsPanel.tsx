@@ -4,8 +4,6 @@ import { IClose } from "../icons";
 import { Button, Surface } from "./ios/controls";
 import { Avatar, Img } from "./ui";
 import { ContentTags } from "./ContentTags";
-import { FilteredContent } from "./FilteredContent";
-import { RowCard } from "./cards";
 import "../styles/video-details.css";
 
 type VideoMeta = {
@@ -60,13 +58,6 @@ export default function VideoDetailsPanel({ meta, videoId, episodeCount, related
         <h3 className="video-details-section-heading">简介</h3>
         <p className="video-details-description">{meta.desc || "暂无简介"}</p>
       </section>
-
-      {related.length > 0 && <section className="video-details-section">
-        <h3 className="video-details-section-heading">相关推荐</h3>
-        <FilteredContent items={related.slice(0, 12)} scopeKey={videoId}>{visible => <div className="scroll-x flex gap-2.5 snap-x">
-          {visible.map(video => <RowCard key={video.id} v={video} onOpen={() => onRelated(video)} />)}
-        </div>}</FilteredContent>
-      </section>}
     </div>
   </div>;
 }

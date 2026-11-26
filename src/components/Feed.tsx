@@ -491,15 +491,9 @@ export default function Feed({ videoIds: rawVideoIds, startIndex = 0, title = ""
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, kind, index, effectiveVideoIds, proxyRetry, store.lineEpoch, accountScope, checked, tagErrors, requestDetail, filtering]);
 
-  /* 相关推荐只在用户打开详情时拉取，避免和首播抢占网络。 */
-  useEffect(() => {
-    if (!active || !curId || kind !== "video" || !allowed || panel !== "detail" || relatedByVideo[relatedKey]) return;
-    const id = curId;
-    api.related(id).then((r) => {
-      if (mounted.current) setRelatedByVideo(previous => ({ ...previous, [relatedKey]: r?.items || [] }));
-    }).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, curId, kind, allowed, panel, relatedKey, relatedByVideo]);
+  /* 相关推荐功能已关闭 */
+  // const relatedKey = `${store.lineEpoch}:${curId}`;
+  // const related: VideoCard[] = [];
 
   /* 拉播放地址 */
   useEffect(() => {
